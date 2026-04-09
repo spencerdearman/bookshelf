@@ -39,8 +39,9 @@ export default function Home() {
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    if (!query.trim()) return;
-    router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    const trimmed = query.trim();
+    if (!trimmed || trimmed.length < 3) return;
+    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
   }
 
   return (

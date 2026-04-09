@@ -68,88 +68,76 @@ export default function MyBooksPage() {
   }
 
   return (
-    <div className="flex flex-col flex-1 bg-zinc-50 dark:bg-black">
+    <div className="flex flex-col flex-1 bg-[#fafaf8] dark:bg-[#111]">
       <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
         <div className="mb-10 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-black sm:text-4xl dark:text-zinc-50">
+          <h1 className="text-3xl font-bold tracking-tight text-[#1a1a1a] sm:text-4xl dark:text-[#f5f5f3]">
             My Books
           </h1>
-          <p className="mt-2 text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 text-[#888] dark:text-[#777]">
             Your personal collection
           </p>
         </div>
 
         {!user ? (
-          <div className="flex flex-col items-center gap-4 py-16 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-100 text-3xl dark:bg-zinc-800">
-              🔒
-            </div>
-            <p className="text-zinc-500 dark:text-zinc-400">Sign in to see your books.</p>
+          <div className="flex flex-col items-center gap-3 py-20 text-center">
+            <p className="text-[#999] dark:text-[#666]">Sign in to see your books.</p>
           </div>
         ) : loading ? (
-          <div className="flex justify-center py-16">
+          <div className="flex justify-center py-20">
             <div className="spinner" />
           </div>
         ) : error ? (
-          <p className="text-center text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="text-center text-sm text-red-500">{error}</p>
         ) : books.length === 0 ? (
-          <div className="flex flex-col items-center gap-4 py-16 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-100 text-3xl dark:bg-zinc-800">
-              📖
-            </div>
-            <div>
-              <p className="font-medium text-black dark:text-zinc-50">No books saved yet</p>
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                <a href="/search" className="font-medium text-black underline dark:text-zinc-50">
-                  Find some books
-                </a>{" "}
-                to start your collection.
-              </p>
-            </div>
+          <div className="flex flex-col items-center gap-3 py-20 text-center">
+            <p className="font-medium text-[#1a1a1a] dark:text-[#f5f5f3]">No books saved yet</p>
+            <p className="text-sm text-[#999] dark:text-[#666]">
+              <a href="/search" className="underline hover:text-[#1a1a1a] dark:hover:text-[#f5f5f3]">
+                Find some books
+              </a>{" "}
+              to start your collection.
+            </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 md:grid-cols-4 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 sm:gap-x-5 md:grid-cols-4 lg:grid-cols-5">
             {books.map((book) => (
-              <div
-                key={book.id}
-                className="group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white transition-shadow hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
-              >
+              <div key={book.id} className="flex flex-col">
                 <a
                   href={`/book/${book.ol_key.replace("/works/", "")}`}
+                  className="group"
                 >
-                  <div className="relative aspect-[2/3] w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+                  <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-[#eee] shadow-[0_1px_4px_rgba(0,0,0,0.08)] transition-all duration-200 group-hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] group-hover:-translate-y-0.5 dark:bg-[#222] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)] dark:group-hover:shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
                     {book.cover_url ? (
                       <Image
                         src={book.cover_url}
                         alt={book.title}
                         fill
                         sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 20vw"
-                        className="object-cover transition-transform group-hover:scale-105"
+                        className="object-cover"
                       />
                     ) : (
-                      <div className="flex h-full items-center justify-center text-xs text-zinc-400">
-                        No cover
+                      <div className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center">
+                        <span className="text-xs font-medium text-[#999] line-clamp-3">{book.title}</span>
                       </div>
                     )}
                   </div>
-                  <div className="p-3">
-                    <p className="text-sm font-semibold leading-tight text-black line-clamp-2 dark:text-zinc-50">
+                  <div className="mt-2.5 min-w-0">
+                    <p className="text-[13px] font-medium leading-snug text-[#1a1a1a] line-clamp-1 dark:text-[#e5e5e3]">
                       {book.title}
                     </p>
-                    <p className="mt-1 text-xs text-zinc-500 line-clamp-1">
+                    <p className="mt-0.5 text-[12px] text-[#999] line-clamp-1 dark:text-[#666]">
                       {book.author}
                     </p>
                   </div>
                 </a>
-                <div className="px-3 pb-3">
-                  <button
-                    onClick={() => handleRemove(book.id, book.title)}
-                    disabled={removingId === book.id}
-                    className="w-full rounded-lg border border-red-200 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
-                  >
-                    {removingId === book.id ? "Removing..." : "Remove"}
-                  </button>
-                </div>
+                <button
+                  onClick={() => handleRemove(book.id, book.title)}
+                  disabled={removingId === book.id}
+                  className="mt-2 w-full rounded-xl py-2 text-[12px] font-medium transition-colors border border-[#e5e5e0] text-red-500 hover:bg-red-50 disabled:opacity-50 dark:border-[#2a2a2a] dark:text-red-400 dark:hover:bg-red-950/30"
+                >
+                  {removingId === book.id ? "Removing..." : "Remove"}
+                </button>
               </div>
             ))}
           </div>

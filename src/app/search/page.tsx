@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession, useUser } from "@clerk/nextjs";
 import { createClerkSupabaseClient } from "@/lib/supabase";
@@ -14,6 +14,14 @@ interface BookResult {
 }
 
 export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="flex flex-1 items-center justify-center"><div className="spinner" /></div>}>
+      <SearchContent />
+    </Suspense>
+  );
+}
+
+function SearchContent() {
   const searchParams = useSearchParams();
   const { session } = useSession();
   const { user } = useUser();

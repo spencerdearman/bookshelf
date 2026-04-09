@@ -39,7 +39,7 @@ function SearchContent() {
     setSearched(true);
     try {
       const res = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=12&language=eng`
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=12`
       );
       if (!res.ok) throw new Error(`Search failed (${res.status})`);
       const data = await res.json();

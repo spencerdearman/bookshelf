@@ -36,21 +36,21 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ClerkProvider>
-          <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/80 backdrop-blur-md dark:border-zinc-800 dark:bg-black/80">
-            <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-              <nav className="flex items-center gap-6">
-                <a href="/" className="text-lg font-bold tracking-tight text-black dark:text-zinc-50">
+          <header className="sticky top-0 z-50 border-b border-[#e8e8e4] bg-[#fafaf8]/90 backdrop-blur-md dark:border-[#222] dark:bg-[#111]/90">
+            <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
+              <nav className="flex items-center gap-5 sm:gap-6">
+                <a href="/" className="text-[17px] font-semibold tracking-tight text-[#1a1a1a] dark:text-[#f5f5f3]">
                   Bookshelf
                 </a>
-                <div className="flex items-center gap-4">
-                  <a href="/" className="text-sm text-zinc-500 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-zinc-50">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <a href="/" className="text-[13px] text-[#888] transition-colors hover:text-[#1a1a1a] dark:text-[#777] dark:hover:text-[#f5f5f3]">
                     Home
                   </a>
-                  <a href="/search" className="text-sm text-zinc-500 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-zinc-50">
+                  <a href="/search" className="text-[13px] text-[#888] transition-colors hover:text-[#1a1a1a] dark:text-[#777] dark:hover:text-[#f5f5f3]">
                     Search
                   </a>
                   <Show when="signed-in">
-                    <a href="/my-books" className="text-sm text-zinc-500 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-zinc-50">
+                    <a href="/my-books" className="text-[13px] text-[#888] transition-colors hover:text-[#1a1a1a] dark:text-[#777] dark:hover:text-[#f5f5f3]">
                       My Books
                     </a>
                   </Show>
@@ -59,12 +59,12 @@ export default function RootLayout({
               <div className="flex items-center gap-3">
                 <Show when="signed-out">
                   <SignInButton>
-                    <button className="rounded-lg px-3 py-1.5 text-sm text-zinc-600 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-zinc-50">
+                    <button className="text-[13px] text-[#888] transition-colors hover:text-[#1a1a1a] dark:text-[#777] dark:hover:text-[#f5f5f3]">
                       Sign in
                     </button>
                   </SignInButton>
                   <SignUpButton>
-                    <button className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200">
+                    <button className="rounded-lg bg-[#1a1a1a] px-3.5 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-[#333] dark:bg-[#f5f5f3] dark:text-[#1a1a1a] dark:hover:bg-[#ddd]">
                       Sign up
                     </button>
                   </SignUpButton>

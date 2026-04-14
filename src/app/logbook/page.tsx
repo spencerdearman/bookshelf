@@ -2,27 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useSession, useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { createClerkSupabaseClient } from "@/lib/supabase";
-
-interface Flight {
-  id: string;
-  flight_number: string;
-  departure_iata: string;
-  arrival_iata: string;
-  scheduled_departure: string;
-  scheduled_arrival: string | null;
-  aircraft_type: string | null;
-  airline_name: string | null;
-  distance_nm: number | null;
-  notes: string | null;
-}
+import FlightCard, { type FlightData } from "@/components/FlightCard";
 
 export default function LogbookPage() {
   const { session } = useSession();
   const { user, isLoaded } = useUser();
-  const [flights, setFlights] = useState<Flight[]>([]);
+  const router = useRouter();
+  const [flights, setFlights] = useState<FlightData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session || !user) {
@@ -40,28 +29,12 @@ export default function LogbookPage() {
       .eq("user_id", user.id)
       .order("scheduled_departure", { ascending: false })
       .then(({ data }) => {
-        setFlights(data ?? []);
+        setFlights((data as FlightData[]) ?? []);
         setLoading(false);
       });
   }, [session, user]);
 
-  async function handleDelete(id: string, flightNum: string) {
-    if (!session) return;
-    if (!confirm(`Remove ${flightNum} from your logbook?`)) return;
-
-    setDeletingId(id);
-    const supabase = createClerkSupabaseClient(() =>
-      session.getToken({ template: "supabase" })
-    );
-
-    const { error } = await supabase.from("flights").delete().eq("id", id);
-    if (!error) {
-      setFlights((prev) => prev.filter((f) => f.id !== id));
-    }
-    setDeletingId(null);
-  }
-
-  if (!isLoaded) {
+  if (!isLoaded || !session) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="spinner" />
@@ -69,15 +42,7 @@ export default function LogbookPage() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-[14px] text-[#86868b]">Sign in to view your logbook.</p>
-      </div>
-    );
-  }
-
-  const grouped = flights.reduce<Record<string, Flight[]>>((acc, flight) => {
+  const grouped = flights.reduce<Record<string, FlightData[]>>((acc, flight) => {
     const d = new Date(flight.scheduled_departure);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     (acc[key] ??= []).push(flight);
@@ -122,7 +87,10 @@ export default function LogbookPage() {
           <div className="mt-8 space-y-10">
             {Object.entries(grouped).map(([monthKey, monthFlights]) => {
               const [year, month] = monthKey.split("-");
-              const label = new Date(Number(year), Number(month) - 1).toLocaleDateString("en-US", {
+              const label = new Date(
+                Number(year),
+                Number(month) - 1
+              ).toLocaleDateString("en-US", {
                 month: "long",
                 year: "numeric",
               });
@@ -132,45 +100,14 @@ export default function LogbookPage() {
                     {label.toUpperCase()}
                   </p>
                   <div className="mt-3 border-t border-[#e5e5e5]">
-                    {monthFlights.map((flight) => {
-                      const date = new Date(flight.scheduled_departure);
-                      return (
-                        <div key={flight.id} className="group flex items-center gap-4 border-b border-[#e5e5e5] py-3.5">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline gap-3">
-                              <span className="font-mono text-[14px] font-semibold text-[#1d1d1f]">
-                                {flight.flight_number}
-                              </span>
-                              {flight.airline_name && (
-                                <span className="text-[12px] text-[#86868b]">{flight.airline_name}</span>
-                              )}
-                            </div>
-                            <div className="mt-0.5 font-mono text-[12px] text-[#86868b]">
-                              <span className="text-[#1d1d1f]">{flight.departure_iata}</span>
-                              {" \u2192 "}
-                              <span className="text-[#1d1d1f]">{flight.arrival_iata}</span>
-                              {flight.aircraft_type && ` \u00B7 ${flight.aircraft_type}`}
-                              {flight.distance_nm != null && ` \u00B7 ${flight.distance_nm.toLocaleString()} nm`}
-                            </div>
-                            {flight.notes && (
-                              <p className="mt-1 text-[12px] italic text-[#aeaeb2]">{flight.notes}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono text-[12px] text-[#86868b]">
-                              {date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                            </span>
-                            <button
-                              onClick={() => handleDelete(flight.id, flight.flight_number)}
-                              disabled={deletingId === flight.id}
-                              className="font-mono text-[10px] tracking-wider text-[#c7c7cc] opacity-0 transition-all hover:text-[#1d1d1f] group-hover:opacity-100"
-                            >
-                              DEL
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {monthFlights.map((flight) => (
+                      <FlightCard
+                        key={flight.id}
+                        flight={flight}
+                        compact
+                        onClick={() => router.push(`/flight/${flight.id}`)}
+                      />
+                    ))}
                   </div>
                 </div>
               );

@@ -38,9 +38,20 @@ export async function lookupFlight(
 ): Promise<FlightAwareResult | null> {
   const url = `https://www.flightaware.com/live/flight/${encodeURIComponent(callsign)}`;
 
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { "User-Agent": UA },
+      signal: controller.signal,
+    });
+  } catch {
+    return null; // Timeout or network error
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) return null;
 
@@ -179,7 +190,17 @@ export async function searchRoute(
 ): Promise<string[]> {
   const url = `https://www.flightaware.com/live/findflight?origin=${encodeURIComponent(originIcao)}&destination=${encodeURIComponent(destIcao)}`;
 
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { "User-Agent": UA }, signal: controller.signal });
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!res.ok) return [];
 
   const html = await res.text();

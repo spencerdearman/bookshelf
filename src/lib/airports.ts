@@ -45,8 +45,12 @@ const DATA: Airport[] = [
   { icao:"KCLE",iata:"CLE",name:"Cleveland Hopkins",city:"Cleveland",lat:41.4117,lng:-81.8498 },
   { icao:"KMKE",iata:"MKE",name:"Milwaukee Mitchell",city:"Milwaukee",lat:42.9472,lng:-87.8966 },
   { icao:"KMDW",iata:"MDW",name:"Chicago Midway",city:"Chicago",lat:41.7868,lng:-87.7522 },
-  { icao:"KHNL",iata:"HNL",name:"Daniel K. Inouye",city:"Honolulu",lat:21.3187,lng:-157.9225 },
+  { icao:"PHNL",iata:"HNL",name:"Daniel K. Inouye",city:"Honolulu",lat:21.3187,lng:-157.9225 },
+  { icao:"PHOG",iata:"OGG",name:"Kahului",city:"Maui",lat:20.8986,lng:-156.4305 },
+  { icao:"PHKO",iata:"KOA",name:"Ellison Onizuka Kona",city:"Kona",lat:19.7388,lng:-156.0456 },
+  { icao:"PHLH",iata:"LIH",name:"Lihue",city:"Kauai",lat:21.9760,lng:-159.3390 },
   { icao:"PANC",iata:"ANC",name:"Ted Stevens",city:"Anchorage",lat:61.1743,lng:-149.9962 },
+  { icao:"PAFA",iata:"FAI",name:"Fairbanks Intl",city:"Fairbanks",lat:64.8151,lng:-147.8561 },
   // International
   { icao:"EGLL",iata:"LHR",name:"Heathrow",city:"London",lat:51.4700,lng:-0.4543 },
   { icao:"LFPG",iata:"CDG",name:"Charles de Gaulle",city:"Paris",lat:49.0097,lng:2.5479 },

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClerkSupabaseClient } from "@/lib/supabase";
 import FlightCard, { type FlightData } from "@/components/FlightCard";
 import FlightSearch from "@/components/FlightSearch";
+import AllRoutesMap from "@/components/AllRoutesMap";
 
 export default function Dashboard() {
   const { session, isLoaded: sessionLoaded } = useSession();
@@ -23,10 +24,9 @@ export default function Dashboard() {
     return sum + diff / 3600000;
   }, 0);
   const uniqueAirports = new Set(
-    flights.flatMap((f) => [f.departure_iata, f.arrival_iata])
+    flights.flatMap((f) => [f.departure_iata, f.arrival_iata]).filter(Boolean)
   );
 
-  // Split into upcoming and past
   const now = new Date();
   const upcoming = flights.filter(
     (f) => new Date(f.scheduled_departure) >= now
@@ -106,6 +106,18 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+
+        {/* All routes map */}
+        {!loading && flights.length > 0 && (
+          <div className="mt-6">
+            <p className="mb-3 font-mono text-[10px] font-medium tracking-widest text-[#86868b]">
+              YOUR ROUTES
+            </p>
+            <div className="h-[400px] border border-[#e5e5e5]">
+              <AllRoutesMap flights={flights} />
+            </div>
+          </div>
+        )}
 
         <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_320px]">
           {/* Left column: flights */}

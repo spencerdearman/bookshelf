@@ -45,7 +45,7 @@ export default function RootLayout({
                   </a>
                   <Show when="signed-in">
                     <a href="/log" className="text-[12px] text-[#d1d1d6] transition-colors hover:text-white">
-                      Log
+                      Search
                     </a>
                     <a href="/logbook" className="text-[12px] text-[#d1d1d6] transition-colors hover:text-white">
                       Logbook

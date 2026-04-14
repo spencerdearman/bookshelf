@@ -167,3 +167,30 @@ function parseMetaTags(html: string, callsign: string): FlightAwareResult | null
 
   return { callsign, legs: [leg], match: leg };
 }
+
+/**
+ * Search FlightAware for flights between two airports.
+ * Returns callsigns (e.g. ["UAL881", "ANA111"]).
+ */
+export async function searchRoute(
+  originIcao: string,
+  destIcao: string,
+  airlinePrefix?: string
+): Promise<string[]> {
+  const url = `https://www.flightaware.com/live/findflight?origin=${encodeURIComponent(originIcao)}&destination=${encodeURIComponent(destIcao)}`;
+
+  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  if (!res.ok) return [];
+
+  const html = await res.text();
+
+  // Extract callsigns (ICAO format: 2-3 letter airline + digits)
+  const matches = html.match(/(?:[A-Z]{2,3})\d{1,5}/g) ?? [];
+  const unique = [...new Set(matches)];
+
+  if (airlinePrefix) {
+    const prefix = airlinePrefix.toUpperCase();
+    return unique.filter((cs) => cs.startsWith(prefix));
+  }
+  return unique;
+}

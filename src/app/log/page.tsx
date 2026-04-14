@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useSession, useUser } from "@clerk/nextjs";
 import { createClerkSupabaseClient } from "@/lib/supabase";
+import { findAirport } from "@/lib/airports";
 import FlightMap from "@/components/FlightMap";
 
 interface EnrichedData {
@@ -23,10 +24,13 @@ interface FlightResult {
 
 type Tab = "search" | "track" | "manual";
 
-/** Convert ICAO code to IATA: KIAD → IAD, EGLL stays EGLL. */
+/** Convert any airport code to its IATA equivalent: KIAD → IAD, RJTT → HND, EGLL → LHR. */
 function toIata(code: string): string {
   const c = code.toUpperCase().trim();
-  // US airports: strip K prefix (KIAD → IAD, KJFK → JFK)
+  if (!c) return c;
+  const airport = findAirport(c);
+  if (airport) return airport.iata;
+  // Fallback: strip K prefix for US airports not in the database
   if (c.length === 4 && c.startsWith("K")) return c.slice(1);
   return c;
 }
@@ -39,12 +43,17 @@ export default function LogFlightPage() {
   // Search state
   const [airport, setAirport] = useState("");
   const [destFilter, setDestFilter] = useState("");
-  const [date, setDate] = useState("");
+  const [airlineFilter, setAirlineFilter] = useState("");
+  const [date, setDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<FlightResult[]>([]);
   const [enriched, setEnriched] = useState<Map<string, EnrichedData>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
 
   // Track state
@@ -66,59 +75,43 @@ export default function LogFlightPage() {
     terminal: "",
   });
 
-  // --- Auto-enrich results missing destinations ---
-  const enrichFlights = useCallback(async (flights: FlightResult[]) => {
-    const toEnrich = flights.filter(
-      (f) => !f.estArrivalAirport && f.callsign?.trim()
-    );
-    // Deduplicate by callsign
-    const seen = new Set<string>();
-    const unique = toEnrich.filter((f) => {
-      const cs = f.callsign!.trim();
-      if (seen.has(cs)) return false;
-      seen.add(cs);
-      return true;
+  // Enrich a single flight's destination on demand
+  const enrichOne = useCallback(async (callsign: string, departureIcao?: string) => {
+    setEnriched((prev) => {
+      const next = new Map(prev);
+      next.set(callsign, { loading: true });
+      return next;
     });
-
-    // Mark as loading
-    const init = new Map<string, EnrichedData>();
-    for (const f of unique) {
-      init.set(f.callsign!.trim(), { loading: true });
-    }
-    setEnriched(new Map(init));
-
-    // Enrich sequentially (avoid hammering FlightAware)
-    const updated = new Map(init);
-    for (const f of unique.slice(0, 20)) {
-      const cs = f.callsign!.trim();
-      try {
-        const params = new URLSearchParams({ callsign: cs });
-        if (f.estDepartureAirport) params.set("departure_icao", f.estDepartureAirport);
-        const res = await fetch(`/api/flights/refresh?${params}`);
-        const data = await res.json();
-        updated.set(cs, {
+    try {
+      const params = new URLSearchParams({ callsign });
+      if (departureIcao) params.set("departure_icao", departureIcao);
+      const res = await fetch(`/api/flights/refresh?${params}`);
+      const data = await res.json();
+      setEnriched((prev) => {
+        const next = new Map(prev);
+        next.set(callsign, {
           arrival_iata: data.arrival_iata || undefined,
           aircraft_type: data.aircraft_type || undefined,
           aircraft_friendly: data.aircraft_friendly || undefined,
           loading: false,
         });
-      } catch {
-        updated.set(cs, { loading: false });
-      }
-      setEnriched(new Map(updated));
+        return next;
+      });
+    } catch {
+      setEnriched((prev) => {
+        const next = new Map(prev);
+        next.set(callsign, { loading: false });
+        return next;
+      });
     }
   }, []);
-
-  useEffect(() => {
-    if (results.length > 0 && results.some((r) => !r.estArrivalAirport)) {
-      enrichFlights(results);
-    }
-  }, [results]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Search by airport ---
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    if (!airport.trim() || !date) return;
+    const origin = airport.trim().toUpperCase();
+    const dest = destFilter.trim().toUpperCase();
+    if ((!origin && !dest) || !date) return;
 
     setLoading(true);
     setError(null);
@@ -126,18 +119,25 @@ export default function LogFlightPage() {
     setEnriched(new Map());
 
     try {
-      const res = await fetch(
-        `/api/flights/search?airport=${encodeURIComponent(airport.trim().toUpperCase())}&date=${date}`
-      );
+      // Build query — server handles dest filtering via FlightAware
+      const searchAirport = origin || dest;
+      const mode = origin ? "departures" : "arrivals";
+      const params = new URLSearchParams({
+        airport: searchAirport,
+        date,
+        mode,
+      });
+      if (dest && origin) params.set("dest", dest);
+      if (airlineFilter.trim()) params.set("airline", airlineFilter.trim());
+
+      const res = await fetch(`/api/flights/search?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Error (${res.status})`);
 
-      const flights: FlightResult[] = (data.flights ?? []).filter(
-        (f: FlightResult) => f.callsign?.trim()
-      );
+      const flights: FlightResult[] = data.flights ?? [];
 
       if (flights.length === 0) {
-        setError("No flights found. Try a different date or add manually.");
+        setError("No flights found. Try a different date or adjust your filters.");
       } else {
         setResults(flights);
       }
@@ -150,54 +150,58 @@ export default function LogFlightPage() {
 
   async function handleSaveFlight(flight: FlightResult) {
     if (!session || !user) return;
+    const key = `${flight.icao24}-${flight.firstSeen}`;
+    setSaving((prev) => new Set(prev).add(key));
 
-    const supabase = createClerkSupabaseClient(() =>
-      session.getToken({ template: "supabase" })
-    );
+    try {
+      const supabase = createClerkSupabaseClient(() =>
+        session.getToken({ template: "supabase" })
+      );
 
-    await supabase
-      .from("profiles")
-      .upsert({ clerk_id: user.id }, { onConflict: "clerk_id" });
+      await supabase
+        .from("profiles")
+        .upsert({ clerk_id: user.id }, { onConflict: "clerk_id" });
 
-    const departure = new Date(flight.firstSeen * 1000).toISOString();
-    const arrival = new Date(flight.lastSeen * 1000).toISOString();
-    const callsign = (flight.callsign ?? "").trim();
+      const departure = new Date(flight.firstSeen * 1000).toISOString();
+      const arrival = new Date(flight.lastSeen * 1000).toISOString();
+      const callsign = (flight.callsign ?? "").trim();
 
-    let arrivalIata = flight.estArrivalAirport ?? "";
-    let aircraftType: string | null = null;
+      let arrivalIata = flight.estArrivalAirport ?? "";
+      let aircraftType: string | null = null;
 
-    // If destination is missing, try FlightAware
-    if (!arrivalIata && callsign) {
-      try {
-        const params = new URLSearchParams({ callsign });
-        if (flight.estDepartureAirport) {
-          params.set("departure_icao", flight.estDepartureAirport);
+      // If destination is missing, try FlightAware
+      if (!arrivalIata && callsign) {
+        try {
+          const params = new URLSearchParams({ callsign });
+          if (flight.estDepartureAirport) {
+            params.set("departure_icao", flight.estDepartureAirport);
+          }
+          const res = await fetch(`/api/flights/refresh?${params}`);
+          const data = await res.json();
+          if (data.arrival_iata) arrivalIata = data.arrival_iata;
+          if (data.aircraft_type) aircraftType = data.aircraft_type;
+        } catch {
+          // proceed without destination
         }
-        const res = await fetch(`/api/flights/refresh?${params}`);
-        const data = await res.json();
-        if (data.arrival_iata) arrivalIata = data.arrival_iata;
-        if (data.aircraft_type) aircraftType = data.aircraft_type;
-      } catch {
-        // proceed without destination
       }
-    }
 
-    const { error } = await supabase.from("flights").insert({
-      user_id: user.id,
-      flight_number: callsign,
-      departure_iata: toIata(flight.estDepartureAirport ?? ""),
-      arrival_iata: toIata(arrivalIata),
-      scheduled_departure: departure,
-      scheduled_arrival: arrival,
-      aircraft_type: aircraftType,
-      notes: notes || null,
-    });
+      const { error } = await supabase.from("flights").insert({
+        user_id: user.id,
+        flight_number: callsign,
+        departure_iata: toIata(flight.estDepartureAirport ?? ""),
+        arrival_iata: toIata(arrivalIata),
+        scheduled_departure: departure,
+        scheduled_arrival: arrival,
+        aircraft_type: aircraftType,
+      });
 
-    if (error) {
-      alert(`Error: ${error.message}`);
-    } else {
-      const key = `${flight.icao24}-${flight.firstSeen}`;
-      setSaved((prev) => new Set(prev).add(key));
+      if (error) {
+        alert(`Error: ${error.message}`);
+      } else {
+        setSaved((prev) => new Set(prev).add(key));
+      }
+    } finally {
+      setSaving((prev) => { const next = new Set(prev); next.delete(key); return next; });
     }
   }
 
@@ -226,7 +230,7 @@ export default function LogFlightPage() {
   }
 
   async function handleSaveTracked() {
-    if (!session || !user || !trackResult || !trackResult.live) return;
+    if (!session || !user || !trackResult) return;
 
     const supabase = createClerkSupabaseClient(() =>
       session.getToken({ template: "supabase" })
@@ -238,11 +242,11 @@ export default function LogFlightPage() {
 
     const { error } = await supabase.from("flights").insert({
       user_id: user.id,
-      flight_number: (trackResult.callsign as string) ?? "",
-      departure_iata: "",
-      arrival_iata: "",
+      flight_number: String(trackResult.callsign ?? ""),
+      departure_iata: toIata(String(trackResult.origin ?? "")),
+      arrival_iata: toIata(String(trackResult.destination ?? "")),
       scheduled_departure: new Date().toISOString(),
-      notes: notes || null,
+      aircraft_type: trackResult.aircraft ? String(trackResult.aircraft) : null,
     });
 
     if (error) {
@@ -322,7 +326,7 @@ export default function LogFlightPage() {
     <div className="flex flex-1 flex-col">
       <main className="mx-auto w-full max-w-[520px] px-5 py-10">
         <h1 className="font-mono text-[22px] font-bold tracking-tight text-[#1d1d1f]">
-          Log Flight
+          Search Flights
         </h1>
 
         {/* Tabs */}
@@ -346,7 +350,7 @@ export default function LogFlightPage() {
         {tab === "search" && (
           <>
             <form onSubmit={handleSearch} className="mt-8 space-y-6">
-              <div className="flex gap-6">
+              <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">
                     ORIGIN
@@ -360,7 +364,7 @@ export default function LogFlightPage() {
                     className={inputClass}
                   />
                 </div>
-                <div className="w-20">
+                <div className="flex-1">
                   <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">
                     DEST
                   </label>
@@ -384,23 +388,26 @@ export default function LogFlightPage() {
                     className={inputClass}
                   />
                 </div>
-              </div>
-              <div>
-                <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">
-                  NOTES
-                </label>
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Optional"
-                  className={inputClass}
-                />
+                <div className="w-16">
+                  <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">
+                    AIRLINE
+                  </label>
+                  <input
+                    type="text"
+                    value={airlineFilter}
+                    onChange={(e) => setAirlineFilter(e.target.value)}
+                    placeholder="UA"
+                    maxLength={3}
+                    className={inputClass}
+                  />
+                </div>
               </div>
               <button
                 type="submit"
-                disabled={loading || !airport.trim() || !date}
-                className="w-full bg-[#1d1d1f] py-3 font-mono text-[12px] font-medium tracking-wider text-white transition-opacity hover:opacity-80 disabled:opacity-30"
+                disabled={loading || (!airport.trim() && !destFilter.trim()) || !date}
+                className={`w-full py-3 font-mono text-[12px] font-medium tracking-wider text-white transition-opacity hover:opacity-80 disabled:opacity-30 ${
+                  loading ? "search-loading" : "bg-[#1d1d1f]"
+                }`}
               >
                 {loading ? "SEARCHING..." : "SEARCH"}
               </button>
@@ -410,23 +417,13 @@ export default function LogFlightPage() {
               <p className="mt-6 font-mono text-[12px] text-[#86868b]">{error}</p>
             )}
 
-            {results.length > 0 && (() => {
-              const df = destFilter.toUpperCase().trim();
-              const filtered = df
-                ? results.filter((f) => {
-                    const arrDirect = toIata(f.estArrivalAirport ?? "");
-                    const cs = (f.callsign ?? "").trim();
-                    const arrEnriched = cs ? toIata(enriched.get(cs)?.arrival_iata ?? "") : "";
-                    return arrDirect === df || arrEnriched === df;
-                  })
-                : results;
-              return (
+            {results.length > 0 && (
               <div className="mt-8">
                 <p className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">
-                  {filtered.length} RESULTS{df ? ` TO ${df}` : ""}
+                  {results.length} RESULTS{destFilter.trim() ? ` TO ${toIata(destFilter)}` : ""}
                 </p>
                 <div className="mt-3 border-t border-[#e5e5e5]">
-                  {filtered.map((flight) => {
+                  {results.map((flight) => {
                     const key = `${flight.icao24}-${flight.firstSeen}`;
                     const cs = (flight.callsign ?? "").trim();
                     const depTime = new Date(flight.firstSeen * 1000);
@@ -454,7 +451,13 @@ export default function LogFlightPage() {
                             {dest ? (
                               <span className="text-[#1d1d1f]">{toIata(dest)}</span>
                             ) : extra?.loading ? (
-                              <span className="text-[#c7c7cc]">loading...</span>
+                              <span className="text-[#c7c7cc]">...</span>
+                            ) : cs && !extra ? (
+                              <button
+                                type="button"
+                                onClick={(ev) => { ev.stopPropagation(); enrichOne(cs, flight.estDepartureAirport ?? undefined); }}
+                                className="text-[#86868b] underline underline-offset-2"
+                              >?</button>
                             ) : (
                               "\u2014"
                             )}
@@ -474,22 +477,23 @@ export default function LogFlightPage() {
                         </div>
                         <button
                           onClick={() => handleSaveFlight(flight)}
-                          disabled={saved.has(key)}
+                          disabled={saved.has(key) || saving.has(key)}
                           className={`font-mono text-[11px] font-medium tracking-wider transition-opacity ${
                             saved.has(key)
                               ? "text-[#c7c7cc]"
+                              : saving.has(key)
+                              ? "text-[#86868b]"
                               : "text-[#1d1d1f] underline underline-offset-2 hover:opacity-60"
                           }`}
                         >
-                          {saved.has(key) ? "ADDED" : "ADD"}
+                          {saved.has(key) ? "ADDED" : saving.has(key) ? "SAVING..." : "ADD"}
                         </button>
                       </div>
                     );
                   })}
                 </div>
               </div>
-              );
-            })()}
+            )}
           </>
         )}
 
@@ -556,7 +560,19 @@ export default function LogFlightPage() {
                       </span>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    {/* Route */}
+                    {trackResult.origin || trackResult.destination ? (
+                      <div className="mt-2 font-mono text-[13px] text-[#86868b]">
+                        <span className="text-[#1d1d1f]">{String(trackResult.origin || "?")}</span>
+                        {" \u2192 "}
+                        <span className="text-[#1d1d1f]">{String(trackResult.destination || "?")}</span>
+                        {trackResult.aircraft ? (
+                          <span className="ml-2 text-[11px] text-[#aeaeb2]">{String(trackResult.aircraft)}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 grid grid-cols-3 gap-4">
                       {[
                         {
                           label: "ALT",
@@ -579,13 +595,6 @@ export default function LogFlightPage() {
                               ? `${trackResult.heading}\u00B0`
                               : "\u2014",
                         },
-                        {
-                          label: "V/S",
-                          value:
-                            trackResult.vertical_rate_fpm != null
-                              ? `${(trackResult.vertical_rate_fpm as number) > 0 ? "+" : ""}${trackResult.vertical_rate_fpm} fpm`
-                              : "\u2014",
-                        },
                       ].map(({ label, value }) => (
                         <div key={label}>
                           <p className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">
@@ -598,17 +607,12 @@ export default function LogFlightPage() {
                       ))}
                     </div>
 
-                    {/* Mini map */}
+                    {/* Position */}
                     {trackResult.latitude != null &&
                       trackResult.longitude != null && (
-                        <div className="mt-4 h-[200px] border border-[#e5e5e5]">
-                          <FlightMap
-                            aircraft={{
-                              lat: trackResult.latitude as number,
-                              lng: trackResult.longitude as number,
-                            }}
-                          />
-                        </div>
+                        <p className="mt-3 font-mono text-[11px] text-[#aeaeb2]">
+                          {(trackResult.latitude as number).toFixed(4)}, {(trackResult.longitude as number).toFixed(4)}
+                        </p>
                       )}
 
                     <button
@@ -619,10 +623,32 @@ export default function LogFlightPage() {
                     </button>
                   </>
                 ) : (
-                  <p className="font-mono text-[13px] text-[#86868b]">
-                    {(trackResult.message as string) ||
-                      "Flight not currently airborne."}
-                  </p>
+                  <div>
+                    {trackResult.callsign ? (
+                      <p className="font-mono text-[16px] font-bold text-[#1d1d1f]">
+                        {String(trackResult.callsign)}
+                      </p>
+                    ) : null}
+                    {trackResult.origin || trackResult.destination ? (
+                      <p className="mt-1 font-mono text-[13px] text-[#86868b]">
+                        {String(trackResult.origin || "?")} {"\u2192"} {String(trackResult.destination || "?")}
+                        {trackResult.aircraft ? (
+                          <span className="ml-2 text-[11px] text-[#aeaeb2]">{String(trackResult.aircraft)}</span>
+                        ) : null}
+                      </p>
+                    ) : null}
+                    <p className="mt-2 font-mono text-[12px] text-[#aeaeb2]">
+                      {String(trackResult.message || "Flight not currently airborne.")}
+                    </p>
+                    {trackResult.callsign ? (
+                      <button
+                        onClick={handleSaveTracked}
+                        className="mt-4 w-full border border-[#e5e5e5] bg-white py-2.5 font-mono text-[11px] font-medium tracking-wider text-[#1d1d1f] transition-colors hover:bg-[#fafafa]"
+                      >
+                        ADD TO LOGBOOK
+                      </button>
+                    ) : null}
+                  </div>
                 )}
               </div>
             )}

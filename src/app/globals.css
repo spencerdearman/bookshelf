@@ -35,3 +35,14 @@ body {
 input[type="date"] {
   color-scheme: light;
 }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.search-loading {
+  background: linear-gradient(90deg, #1d1d1f 25%, #3a3a3c 50%, #1d1d1f 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}

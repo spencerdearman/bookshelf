@@ -1,31 +1,67 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useUser } from "@clerk/nextjs";
-import { supabase } from "@/lib/supabase";
+import { useSession, useUser } from "@clerk/nextjs";
+import { createClerkSupabaseClient } from "@/lib/supabase";
 
-interface ProfileRow {
+interface LeaderboardEntry {
   clerk_id: string;
-  total_miles: number;
-  home_airport: string | null;
+  flight_count: number;
+  airports: string[];
 }
 
 export default function LeaderboardPage() {
-  const { user } = useUser();
-  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const { session, isLoaded: sessionLoaded } = useSession();
+  const { user, isLoaded } = useUser();
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!session || !user) {
+      setLoading(false);
+      return;
+    }
+
+    const supabase = createClerkSupabaseClient(() =>
+      session.getToken({ template: "supabase" })
+    );
+
     supabase
-      .from("profiles")
-      .select("clerk_id, total_miles, home_airport")
-      .order("total_miles", { ascending: false })
-      .limit(50)
+      .from("flights")
+      .select("user_id, departure_iata, arrival_iata")
       .then(({ data }) => {
-        setProfiles(data ?? []);
+        if (!data || data.length === 0) { setLoading(false); return; }
+
+        const users: Record<string, { count: number; airports: Set<string> }> = {};
+        for (const f of data) {
+          if (!users[f.user_id]) {
+            users[f.user_id] = { count: 0, airports: new Set() };
+          }
+          users[f.user_id].count++;
+          if (f.departure_iata) users[f.user_id].airports.add(f.departure_iata);
+          if (f.arrival_iata) users[f.user_id].airports.add(f.arrival_iata);
+        }
+
+        const sorted = Object.entries(users)
+          .map(([clerk_id, { count, airports }]) => ({
+            clerk_id,
+            flight_count: count,
+            airports: Array.from(airports),
+          }))
+          .sort((a, b) => b.flight_count - a.flight_count);
+
+        setEntries(sorted);
         setLoading(false);
       });
-  }, []);
+  }, [session, user]);
+
+  if (!isLoaded || !sessionLoaded) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <div className="spinner" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 flex-col">
@@ -34,26 +70,26 @@ export default function LeaderboardPage() {
           Leaderboard
         </h1>
         <p className="mt-1 font-mono text-[12px] text-[#86868b]">
-          Total nautical miles
+          Total flights logged
         </p>
 
         {loading ? (
           <div className="flex justify-center py-20">
             <div className="spinner" />
           </div>
-        ) : profiles.length === 0 ? (
+        ) : entries.length === 0 ? (
           <div className="mt-10 flex flex-col items-center gap-4 border border-[#e5e5e5] py-16 text-center">
             <p className="text-[14px] text-[#86868b]">No flights logged yet.</p>
           </div>
         ) : (
           <div className="mt-8 border-t border-[#e5e5e5]">
-            {profiles.map((profile, i) => {
-              const isYou = user?.id === profile.clerk_id;
+            {entries.map((entry, i) => {
+              const isYou = user?.id === entry.clerk_id;
               const rank = i + 1;
               return (
                 <div
-                  key={profile.clerk_id}
-                  className={`flex items-center gap-4 border-b border-[#e5e5e5] py-3.5 ${
+                  key={entry.clerk_id}
+                  className={`flex items-center gap-4 border-b border-[#e5e5e5] px-2 py-3.5 ${
                     isYou ? "bg-[#fafafa]" : ""
                   }`}
                 >
@@ -63,7 +99,7 @@ export default function LeaderboardPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className="font-mono text-[14px] font-medium text-[#1d1d1f]">
-                        {isYou ? "You" : `Pilot #${profile.clerk_id.slice(-4)}`}
+                        {isYou ? "You" : `Pilot #${entry.clerk_id.slice(-4)}`}
                       </span>
                       {isYou && (
                         <span className="font-mono text-[9px] font-bold tracking-widest text-[#86868b]">
@@ -71,15 +107,15 @@ export default function LeaderboardPage() {
                         </span>
                       )}
                     </div>
-                    {profile.home_airport && (
-                      <p className="font-mono text-[11px] text-[#86868b]">
-                        {profile.home_airport}
-                      </p>
-                    )}
+                    <p className="font-mono text-[11px] text-[#86868b]">
+                      {entry.airports.length} airports
+                    </p>
                   </div>
-                  <span className="font-mono text-[14px] font-semibold text-[#1d1d1f]">
-                    {profile.total_miles.toLocaleString()}
-                    <span className="ml-1 text-[11px] font-normal text-[#86868b]">nm</span>
+                  <span className="pr-2 font-mono text-[14px] font-semibold text-[#1d1d1f]">
+                    {entry.flight_count}
+                    <span className="ml-1 text-[11px] font-normal text-[#86868b]">
+                      flight{entry.flight_count !== 1 ? "s" : ""}
+                    </span>
                   </span>
                 </div>
               );

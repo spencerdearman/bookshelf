@@ -337,18 +337,34 @@ export default function FlightDetailPage({ params }: { params: Promise<{ id: str
         )}
 
         {/* Map */}
-        {(dep || arr || liveData) && (
-          <div className="mt-3 h-[420px] border border-[#e5e5e5]">
-            <FlightMap
-              origin={dep ? { lat: dep.lat, lng: dep.lng, label: dep.iata } : undefined}
-              destination={arr ? { lat: arr.lat, lng: arr.lng, label: arr.iata } : undefined}
-              aircraft={liveData ? {
-                lat: liveData.latitude,
-                lng: liveData.longitude,
-              } : undefined}
-            />
-          </div>
-        )}
+        {(dep || arr) && (() => {
+          // Compute flight progress (0–1)
+          let progress: number | undefined;
+          if (liveData && rd) {
+            const depTime = rd.takeoff?.actual ?? rd.takeoff?.scheduled ?? rd.gate_departure?.actual ?? rd.gate_departure?.scheduled;
+            const arrTime = rd.landing?.scheduled ?? rd.gate_arrival?.scheduled;
+            if (depTime && arrTime) {
+              const now = Date.now() / 1000;
+              progress = Math.max(0, Math.min(1, (now - depTime) / (arrTime - depTime)));
+            }
+          }
+          // Fallback: use scheduled times from the flight record
+          if (progress == null && liveData && flight.scheduled_departure) {
+            const depTs = new Date(flight.scheduled_departure).getTime() / 1000;
+            const arrTs = flight.scheduled_arrival ? new Date(flight.scheduled_arrival).getTime() / 1000 : depTs + 14400;
+            const now = Date.now() / 1000;
+            progress = Math.max(0, Math.min(1, (now - depTs) / (arrTs - depTs)));
+          }
+          return (
+            <div className="mt-3 h-[420px] border border-[#e5e5e5]">
+              <FlightMap
+                origin={dep ? { lat: dep.lat, lng: dep.lng, label: dep.iata } : undefined}
+                destination={arr ? { lat: arr.lat, lng: arr.lng, label: arr.iata } : undefined}
+                progress={progress}
+              />
+            </div>
+          );
+        })()}
 
         {/* Actions */}
         <div className="mt-6 flex gap-3">

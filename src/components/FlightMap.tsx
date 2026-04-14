@@ -7,7 +7,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 interface Props {
   origin?: { lat: number; lng: number; label?: string };
   destination?: { lat: number; lng: number; label?: string };
-  aircraft?: { lat: number; lng: number };
+  progress?: number;
 }
 
 function greatCircleArc(
@@ -36,10 +36,45 @@ function greatCircleArc(
     const z = A * Math.sin(lat1) + B * Math.sin(lat2);
     points.push([toDeg(Math.atan2(y, x)), toDeg(Math.atan2(z, Math.sqrt(x * x + y * y)))]);
   }
+
+  // Fix antimeridian crossings: unwrap longitudes so they don't jump ±360°
+  for (let i = 1; i < points.length; i++) {
+    while (points[i][0] - points[i - 1][0] > 180) points[i][0] -= 360;
+    while (points[i][0] - points[i - 1][0] < -180) points[i][0] += 360;
+  }
+
   return points;
 }
 
+function interpolateArc(coords: [number, number][], t: number): [number, number] {
+  if (coords.length < 2 || t <= 0) return coords[0];
+  if (t >= 1) return coords[coords.length - 1];
+  let totalLen = 0;
+  const segLens: number[] = [];
+  for (let i = 1; i < coords.length; i++) {
+    const dx = coords[i][0] - coords[i - 1][0];
+    const dy = coords[i][1] - coords[i - 1][1];
+    const len = Math.sqrt(dx * dx + dy * dy);
+    segLens.push(len);
+    totalLen += len;
+  }
+  const target = t * totalLen;
+  let accum = 0;
+  for (let i = 0; i < segLens.length; i++) {
+    if (accum + segLens[i] >= target) {
+      const frac = (target - accum) / segLens[i];
+      return [
+        coords[i][0] + frac * (coords[i + 1][0] - coords[i][0]),
+        coords[i][1] + frac * (coords[i + 1][1] - coords[i][1]),
+      ];
+    }
+    accum += segLens[i];
+  }
+  return coords[coords.length - 1];
+}
+
 function autoZoom(distDeg: number): number {
+  if (distDeg > 100) return 1;
   if (distDeg > 80) return 1.2;
   if (distDeg > 40) return 2.2;
   if (distDeg > 20) return 3;
@@ -48,24 +83,42 @@ function autoZoom(distDeg: number): number {
   return 5.5;
 }
 
-export default function FlightMap({ origin, destination, aircraft }: Props) {
+export default function FlightMap({ origin, destination, progress }: Props) {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
-  const routeGeoJSON = useMemo(() => {
+  const arcCoords = useMemo(() => {
     if (!origin || !destination) return null;
-    const coords = greatCircleArc(
-      [origin.lng, origin.lat],
-      [destination.lng, destination.lat]
-    );
+    return greatCircleArc([origin.lng, origin.lat], [destination.lng, destination.lat]);
+  }, [origin, destination]);
+
+  const routeGeoJSON = useMemo(() => {
+    if (!arcCoords) return null;
     return {
       type: "Feature" as const,
-      geometry: { type: "LineString" as const, coordinates: coords },
+      geometry: { type: "LineString" as const, coordinates: arcCoords },
       properties: {},
     };
-  }, [origin, destination]);
+  }, [arcCoords]);
+
+  const aircraftPos = useMemo(() => {
+    if (!arcCoords || progress == null || progress <= 0) return null;
+    const pt = interpolateArc(arcCoords, Math.min(progress, 1));
+    return { lng: pt[0], lat: pt[1] };
+  }, [arcCoords, progress]);
 
   const { center, zoom } = useMemo(() => {
     if (origin && destination) {
+      // Use the unwrapped arc midpoint for proper centering across antimeridian
+      if (arcCoords && arcCoords.length > 0) {
+        const mid = arcCoords[Math.floor(arcCoords.length / 2)];
+        const lngs = arcCoords.map((p) => p[0]);
+        const lats = arcCoords.map((p) => p[1]);
+        const span = Math.max(
+          Math.max(...lngs) - Math.min(...lngs),
+          Math.max(...lats) - Math.min(...lats)
+        );
+        return { center: { lat: mid[1], lng: mid[0] }, zoom: autoZoom(span) };
+      }
       const dx = destination.lng - origin.lng;
       const dy = destination.lat - origin.lat;
       return {
@@ -73,10 +126,9 @@ export default function FlightMap({ origin, destination, aircraft }: Props) {
         zoom: autoZoom(Math.sqrt(dx * dx + dy * dy)),
       };
     }
-    if (aircraft) return { center: { lat: aircraft.lat, lng: aircraft.lng }, zoom: 4 };
     if (origin) return { center: origin, zoom: 4 };
     return { center: { lat: 39, lng: -98 }, zoom: 3 };
-  }, [origin, destination, aircraft]);
+  }, [origin, destination, arcCoords]);
 
   if (!token) {
     return (
@@ -95,7 +147,6 @@ export default function FlightMap({ origin, destination, aircraft }: Props) {
       projection={{ name: "mercator" }}
       attributionControl={false}
     >
-      {/* Route line */}
       {routeGeoJSON && (
         <Source id="route" type="geojson" data={routeGeoJSON}>
           <Layer
@@ -106,7 +157,6 @@ export default function FlightMap({ origin, destination, aircraft }: Props) {
         </Source>
       )}
 
-      {/* Origin */}
       {origin && (
         <Marker latitude={origin.lat} longitude={origin.lng} anchor="center">
           <div className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#1d1d1f] bg-white" />
@@ -118,7 +168,6 @@ export default function FlightMap({ origin, destination, aircraft }: Props) {
         </Marker>
       )}
 
-      {/* Destination */}
       {destination && (
         <Marker latitude={destination.lat} longitude={destination.lng} anchor="center">
           <div className="h-2.5 w-2.5 rounded-full bg-[#1d1d1f]" />
@@ -130,9 +179,8 @@ export default function FlightMap({ origin, destination, aircraft }: Props) {
         </Marker>
       )}
 
-      {/* Aircraft — simple dot */}
-      {aircraft && (
-        <Marker latitude={aircraft.lat} longitude={aircraft.lng} anchor="center">
+      {aircraftPos && (
+        <Marker latitude={aircraftPos.lat} longitude={aircraftPos.lng} anchor="center">
           <div className="h-3 w-3 rounded-full border-[1.5px] border-white bg-[#1d1d1f] shadow-sm" />
         </Marker>
       )}

@@ -5,6 +5,32 @@
 
 const BASE = "https://aeroapi.flightaware.com/aeroapi";
 
+// ---------- IATA → ICAO airline code mapping ----------
+
+const AIRLINE_IATA_TO_ICAO: Record<string, string> = {
+  AA:"AAL",UA:"UAL",DL:"DAL",WN:"SWA",B6:"JBU",AS:"ASA",NK:"NKS",
+  F9:"FFT",HA:"HAL",SY:"SCX",G4:"AAY",QX:"QXE",OH:"COM",YX:"RPA",
+  BA:"BAW",LH:"DLH",AF:"AFR",KL:"KLM",LX:"SWR",SK:"SAS",AY:"FIN",
+  IB:"IBE",TP:"TAP",EI:"EIN",FR:"RYR",U2:"EZY",W6:"WZZ",
+  AC:"ACA",WS:"WJA",
+  EK:"UAE",QR:"QTR",TK:"THY",EY:"ETD",SV:"SVA",
+  NH:"ANA",JL:"JAL",SQ:"SIA",CX:"CPA",QF:"QFA",NZ:"ANZ",
+  CA:"CCA",MU:"CES",CZ:"CSN",
+  AM:"AMX",AV:"AVA",CM:"CMP",LA:"LAN",
+};
+
+/** Convert a user-typed flight number like "UA1764" into ICAO callsigns to try. */
+export function expandCallsign(input: string): string[] {
+  const clean = input.toUpperCase().replace(/\s+/g, "");
+  const results: string[] = [clean];
+  const match = clean.match(/^([A-Z]{2})(\d+)$/);
+  if (match) {
+    const icao = AIRLINE_IATA_TO_ICAO[match[1]];
+    if (icao) results.unshift(`${icao}${match[2]}`);
+  }
+  return [...new Set(results)];
+}
+
 function headers() {
   return { "x-apikey": process.env.FLIGHTAWARE_API_KEY! };
 }

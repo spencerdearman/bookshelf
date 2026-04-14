@@ -5,12 +5,8 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-let clerkClient: SupabaseClient | null = null;
-
 export function createClerkSupabaseClient(getToken: () => Promise<string | null>) {
-  if (clerkClient) return clerkClient;
-
-  clerkClient = createClient(supabaseUrl, supabaseKey, {
+  return createClient(supabaseUrl, supabaseKey, {
     global: {
       fetch: async (url, options = {}) => {
         const token = await getToken();
@@ -22,8 +18,6 @@ export function createClerkSupabaseClient(getToken: () => Promise<string | null>
       },
     },
   });
-
-  return clerkClient;
 }
 
 // Haversine formula — returns distance in nautical miles

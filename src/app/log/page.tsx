@@ -1,30 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSession, useUser } from "@clerk/nextjs";
-import { createClerkSupabaseClient, haversineNm } from "@/lib/supabase";
-import { Search, Plane, Plus } from "lucide-react";
+import { createClerkSupabaseClient } from "@/lib/supabase";
 
 interface FlightResult {
-  flight_number: string;
-  departure_iata: string;
-  departure_name: string;
-  departure_lat: number;
-  departure_lon: number;
-  arrival_iata: string;
-  arrival_name: string;
-  arrival_lat: number;
-  arrival_lon: number;
-  scheduled_departure: string;
-  scheduled_arrival: string;
-  aircraft_type: string | null;
-  airline_name: string | null;
+  icao24: string;
+  callsign: string | null;
+  estDepartureAirport: string | null;
+  estArrivalAirport: string | null;
+  firstSeen: number;
+  lastSeen: number;
 }
 
 export default function LogFlightPage() {
   const { session } = useSession();
-  const { user } = useUser();
-  const [flightNumber, setFlightNumber] = useState("");
+  const { user, isLoaded } = useUser();
+  const [airport, setAirport] = useState("");
   const [date, setDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<FlightResult[]>([]);
@@ -32,7 +24,6 @@ export default function LogFlightPage() {
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
 
-  // Manual entry state
   const [manual, setManual] = useState(false);
   const [manualData, setManualData] = useState({
     flight_number: "",
@@ -45,7 +36,7 @@ export default function LogFlightPage() {
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    if (!flightNumber.trim() || !date) return;
+    if (!airport.trim() || !date) return;
 
     setLoading(true);
     setError(null);
@@ -53,45 +44,21 @@ export default function LogFlightPage() {
 
     try {
       const res = await fetch(
-        `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(flightNumber.trim().toUpperCase())}/${date}`,
-        {
-          headers: {
-            "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
-            "x-rapidapi-key": process.env.NEXT_PUBLIC_RAPID_API_KEY ?? "",
-          },
-        }
+        `/api/flights/search?airport=${encodeURIComponent(airport.trim().toUpperCase())}&date=${date}`
       );
 
+      const data = await res.json();
+
       if (!res.ok) {
-        if (res.status === 404) {
-          setError("Flight not found. Try a different number or date, or add manually.");
-        } else {
-          throw new Error(`API error (${res.status})`);
-        }
-        return;
+        throw new Error(data.error || `API error (${res.status})`);
       }
 
-      const data = await res.json();
-      const flights: FlightResult[] = (Array.isArray(data) ? data : [data])
-        .filter((f: Record<string, unknown>) => f.departure && f.arrival)
-        .map((f: Record<string, Record<string, unknown>>) => ({
-          flight_number: flightNumber.trim().toUpperCase(),
-          departure_iata: (f.departure?.airport as Record<string, string>)?.iata ?? "",
-          departure_name: (f.departure?.airport as Record<string, string>)?.name ?? "",
-          departure_lat: (f.departure?.airport as Record<string, unknown>)?.lat as number ?? 0,
-          departure_lon: (f.departure?.airport as Record<string, unknown>)?.lon as number ?? 0,
-          arrival_iata: (f.arrival?.airport as Record<string, string>)?.iata ?? "",
-          arrival_name: (f.arrival?.airport as Record<string, string>)?.name ?? "",
-          arrival_lat: (f.arrival?.airport as Record<string, unknown>)?.lat as number ?? 0,
-          arrival_lon: (f.arrival?.airport as Record<string, unknown>)?.lon as number ?? 0,
-          scheduled_departure: (f.departure?.scheduledTime as Record<string, string>)?.utc ?? "",
-          scheduled_arrival: (f.arrival?.scheduledTime as Record<string, string>)?.utc ?? "",
-          aircraft_type: (f.aircraft as Record<string, string>)?.model ?? null,
-          airline_name: (f.airline as Record<string, string>)?.name ?? null,
-        }));
+      const flights: FlightResult[] = (data.flights ?? []).filter(
+        (f: FlightResult) => f.callsign?.trim()
+      );
 
       if (flights.length === 0) {
-        setError("No flight data found. Try adding manually.");
+        setError("No flights found. Try a different date or add manually.");
       } else {
         setResults(flights);
       }
@@ -109,33 +76,29 @@ export default function LogFlightPage() {
       session.getToken({ template: "supabase" })
     );
 
-    // Ensure profile exists
     await supabase.from("profiles").upsert(
       { clerk_id: user.id },
       { onConflict: "clerk_id" }
     );
 
-    const distance = Math.round(
-      haversineNm(flight.departure_lat, flight.departure_lon, flight.arrival_lat, flight.arrival_lon)
-    );
+    const departure = new Date(flight.firstSeen * 1000).toISOString();
+    const arrival = new Date(flight.lastSeen * 1000).toISOString();
 
     const { error } = await supabase.from("flights").insert({
       user_id: user.id,
-      flight_number: flight.flight_number,
-      departure_iata: flight.departure_iata,
-      arrival_iata: flight.arrival_iata,
-      scheduled_departure: flight.scheduled_departure,
-      scheduled_arrival: flight.scheduled_arrival,
-      aircraft_type: flight.aircraft_type,
-      airline_name: flight.airline_name,
-      distance_nm: distance || null,
+      flight_number: (flight.callsign ?? "").trim(),
+      departure_iata: flight.estDepartureAirport ?? "",
+      arrival_iata: flight.estArrivalAirport ?? "",
+      scheduled_departure: departure,
+      scheduled_arrival: arrival,
       notes: notes || null,
     });
 
     if (error) {
       alert(`Error: ${error.message}`);
     } else {
-      setSaved((prev) => new Set(prev).add(flight.scheduled_departure));
+      const key = `${flight.icao24}-${flight.firstSeen}`;
+      setSaved((prev) => new Set(prev).add(key));
     }
   }
 
@@ -173,222 +136,241 @@ export default function LogFlightPage() {
     }
   }
 
-  if (!user) {
+  if (!isLoaded) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-slate-400">Sign in to log flights.</p>
+        <div className="spinner" />
       </div>
     );
   }
 
+  if (!user) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <p className="text-[14px] text-[#86868b]">Sign in to log flights.</p>
+      </div>
+    );
+  }
+
+  const inputClass =
+    "w-full border-b border-[#e5e5e5] bg-transparent py-2.5 font-mono text-[14px] text-[#1d1d1f] outline-none transition-colors placeholder:text-[#c7c7cc] focus:border-[#1d1d1f]";
+
   return (
     <div className="flex flex-1 flex-col">
-      <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6">
-        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-          Log a Flight
+      <main className="mx-auto w-full max-w-[520px] px-5 py-10">
+        <h1 className="font-mono text-[22px] font-bold tracking-tight text-[#1d1d1f]">
+          Log Flight
         </h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Search by flight number or add manually.
-        </p>
 
         {/* Toggle */}
-        <div className="mt-6 flex gap-2">
+        <div className="mt-6 flex gap-px border border-[#e5e5e5]">
           <button
             onClick={() => setManual(false)}
-            className={`rounded-xl px-4 py-2 text-xs font-medium transition-all duration-200 ${
+            className={`flex-1 py-2 font-mono text-[11px] font-medium tracking-wider transition-colors ${
               !manual
-                ? "bg-blue-500 text-white"
-                : "bg-white/5 text-slate-400 hover:bg-white/10"
+                ? "bg-[#1d1d1f] text-white"
+                : "bg-white text-[#86868b] hover:text-[#1d1d1f]"
             }`}
           >
-            <Search className="mr-1.5 inline h-3.5 w-3.5" />
-            Search
+            SEARCH
           </button>
           <button
             onClick={() => setManual(true)}
-            className={`rounded-xl px-4 py-2 text-xs font-medium transition-all duration-200 ${
+            className={`flex-1 py-2 font-mono text-[11px] font-medium tracking-wider transition-colors ${
               manual
-                ? "bg-blue-500 text-white"
-                : "bg-white/5 text-slate-400 hover:bg-white/10"
+                ? "bg-[#1d1d1f] text-white"
+                : "bg-white text-[#86868b] hover:text-[#1d1d1f]"
             }`}
           >
-            <Plus className="mr-1.5 inline h-3.5 w-3.5" />
-            Manual
+            MANUAL
           </button>
         </div>
 
         {!manual ? (
           <>
-            <form onSubmit={handleSearch} className="mt-6 space-y-4">
-              <div className="flex gap-3">
+            <form onSubmit={handleSearch} className="mt-8 space-y-6">
+              <div className="flex gap-6">
                 <div className="flex-1">
-                  <label className="mb-1.5 block text-xs font-medium text-slate-400">Flight Number</label>
+                  <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">AIRPORT</label>
                   <input
                     type="text"
-                    value={flightNumber}
-                    onChange={(e) => setFlightNumber(e.target.value)}
-                    placeholder="UA123"
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:border-blue-500/50 focus:bg-white/[0.08]"
+                    value={airport}
+                    onChange={(e) => setAirport(e.target.value)}
+                    placeholder="IAD"
+                    maxLength={4}
+                    className={inputClass}
                   />
                 </div>
                 <div className="flex-1">
-                  <label className="mb-1.5 block text-xs font-medium text-slate-400">Date</label>
+                  <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">DATE</label>
                   <input
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition-all focus:border-blue-500/50 focus:bg-white/[0.08] [color-scheme:dark]"
+                    className={inputClass}
                   />
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-400">Notes (optional)</label>
+                <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">NOTES</label>
                 <input
                   type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Window seat, great view of the Rockies..."
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:border-blue-500/50 focus:bg-white/[0.08]"
+                  placeholder="Optional"
+                  className={inputClass}
                 />
               </div>
               <button
                 type="submit"
-                disabled={loading || !flightNumber.trim() || !date}
-                className="w-full rounded-xl bg-blue-500 py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-blue-400 disabled:opacity-40 disabled:hover:bg-blue-500"
+                disabled={loading || !airport.trim() || !date}
+                className="w-full bg-[#1d1d1f] py-3 font-mono text-[12px] font-medium tracking-wider text-white transition-opacity hover:opacity-80 disabled:opacity-30"
               >
-                {loading ? "Searching..." : "Search Flight"}
+                {loading ? "SEARCHING..." : "SEARCH"}
               </button>
             </form>
 
             {error && (
-              <p className="mt-4 text-center text-sm text-red-400">{error}</p>
+              <p className="mt-6 font-mono text-[12px] text-[#86868b]">{error}</p>
             )}
 
             {results.length > 0 && (
-              <div className="mt-6 space-y-3">
-                {results.map((flight, i) => (
-                  <div key={i} className="glass flex items-center gap-4 rounded-2xl p-4">
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
-                      <Plane className="h-4 w-4 text-blue-400" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-white">
-                          {flight.flight_number}
-                        </span>
-                        {flight.airline_name && (
-                          <span className="text-xs text-slate-500">{flight.airline_name}</span>
-                        )}
+              <div className="mt-8">
+                <p className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">
+                  {results.length} RESULTS
+                </p>
+                <div className="mt-3 border-t border-[#e5e5e5]">
+                  {results.map((flight) => {
+                    const key = `${flight.icao24}-${flight.firstSeen}`;
+                    const depTime = new Date(flight.firstSeen * 1000);
+                    const arrTime = new Date(flight.lastSeen * 1000);
+                    const hasArrival = !!flight.estArrivalAirport;
+                    return (
+                      <div key={key} className="flex items-center gap-4 border-b border-[#e5e5e5] py-3.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-mono text-[14px] font-semibold text-[#1d1d1f]">
+                              {(flight.callsign ?? "").trim() || flight.icao24}
+                            </span>
+                            {!hasArrival && (
+                              <span className="font-mono text-[10px] tracking-wider text-[#86868b]">
+                                EN ROUTE
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-0.5 font-mono text-[12px] text-[#86868b]">
+                            {flight.estDepartureAirport}
+                            {" \u2192 "}
+                            {hasArrival ? flight.estArrivalAirport : "\u2014"}
+                            {" \u00B7 "}
+                            {depTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                            {"\u2013"}
+                            {arrTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleSaveFlight(flight)}
+                          disabled={saved.has(key)}
+                          className={`font-mono text-[11px] font-medium tracking-wider transition-opacity ${
+                            saved.has(key)
+                              ? "text-[#c7c7cc]"
+                              : "text-[#1d1d1f] underline underline-offset-2 hover:opacity-60"
+                          }`}
+                        >
+                          {saved.has(key) ? "ADDED" : "ADD"}
+                        </button>
                       </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
-                        <span className="font-mono font-medium text-slate-300">{flight.departure_iata}</span>
-                        <span className="text-slate-600">→</span>
-                        <span className="font-mono font-medium text-slate-300">{flight.arrival_iata}</span>
-                        {flight.aircraft_type && (
-                          <>
-                            <span className="text-slate-600">·</span>
-                            <span>{flight.aircraft_type}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleSaveFlight(flight)}
-                      disabled={saved.has(flight.scheduled_departure)}
-                      className="rounded-xl bg-blue-500 px-4 py-2 text-xs font-medium text-white transition-all duration-200 hover:bg-blue-400 disabled:bg-white/5 disabled:text-slate-500"
-                    >
-                      {saved.has(flight.scheduled_departure) ? "Logged" : "Add to Log"}
-                    </button>
-                  </div>
-                ))}
+                    );
+                  })}
+                </div>
               </div>
             )}
           </>
         ) : (
-          <form onSubmit={handleManualSave} className="mt-6 space-y-4">
-            <div className="flex gap-3">
+          <form onSubmit={handleManualSave} className="mt-8 space-y-6">
+            <div className="flex gap-6">
               <div className="flex-1">
-                <label className="mb-1.5 block text-xs font-medium text-slate-400">Flight Number</label>
+                <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">FLIGHT</label>
                 <input
                   type="text"
                   value={manualData.flight_number}
                   onChange={(e) => setManualData({ ...manualData, flight_number: e.target.value })}
                   placeholder="UA123"
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:border-blue-500/50 focus:bg-white/[0.08]"
+                  className={inputClass}
                 />
               </div>
               <div className="flex-1">
-                <label className="mb-1.5 block text-xs font-medium text-slate-400">Date</label>
+                <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">DATE</label>
                 <input
                   type="date"
                   value={manualData.date}
                   onChange={(e) => setManualData({ ...manualData, date: e.target.value })}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition-all focus:border-blue-500/50 focus:bg-white/[0.08] [color-scheme:dark]"
+                  className={inputClass}
                 />
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-6">
               <div className="flex-1">
-                <label className="mb-1.5 block text-xs font-medium text-slate-400">From (IATA)</label>
+                <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">FROM</label>
                 <input
                   type="text"
                   value={manualData.departure_iata}
                   onChange={(e) => setManualData({ ...manualData, departure_iata: e.target.value })}
-                  placeholder="ORD"
-                  maxLength={3}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:border-blue-500/50 focus:bg-white/[0.08]"
+                  placeholder="IAD"
+                  maxLength={4}
+                  className={inputClass}
                 />
               </div>
               <div className="flex-1">
-                <label className="mb-1.5 block text-xs font-medium text-slate-400">To (IATA)</label>
+                <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">TO</label>
                 <input
                   type="text"
                   value={manualData.arrival_iata}
                   onChange={(e) => setManualData({ ...manualData, arrival_iata: e.target.value })}
                   placeholder="LAX"
-                  maxLength={3}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:border-blue-500/50 focus:bg-white/[0.08]"
+                  maxLength={4}
+                  className={inputClass}
                 />
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-6">
               <div className="flex-1">
-                <label className="mb-1.5 block text-xs font-medium text-slate-400">Aircraft (optional)</label>
+                <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">AIRCRAFT</label>
                 <input
                   type="text"
                   value={manualData.aircraft_type}
                   onChange={(e) => setManualData({ ...manualData, aircraft_type: e.target.value })}
-                  placeholder="Boeing 737-800"
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:border-blue-500/50 focus:bg-white/[0.08]"
+                  placeholder="Optional"
+                  className={inputClass}
                 />
               </div>
               <div className="flex-1">
-                <label className="mb-1.5 block text-xs font-medium text-slate-400">Airline (optional)</label>
+                <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">AIRLINE</label>
                 <input
                   type="text"
                   value={manualData.airline_name}
                   onChange={(e) => setManualData({ ...manualData, airline_name: e.target.value })}
-                  placeholder="United Airlines"
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:border-blue-500/50 focus:bg-white/[0.08]"
+                  placeholder="Optional"
+                  className={inputClass}
                 />
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-400">Notes (optional)</label>
+              <label className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">NOTES</label>
               <input
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Window seat, great view of the Rockies..."
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:border-blue-500/50 focus:bg-white/[0.08]"
+                placeholder="Optional"
+                className={inputClass}
               />
             </div>
             <button
               type="submit"
               disabled={!manualData.flight_number || !manualData.departure_iata || !manualData.arrival_iata || !manualData.date}
-              className="w-full rounded-xl bg-blue-500 py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-blue-400 disabled:opacity-40 disabled:hover:bg-blue-500"
+              className="w-full bg-[#1d1d1f] py-3 font-mono text-[12px] font-medium tracking-wider text-white transition-opacity hover:opacity-80 disabled:opacity-30"
             >
-              Log Flight
+              LOG FLIGHT
             </button>
           </form>
         )}

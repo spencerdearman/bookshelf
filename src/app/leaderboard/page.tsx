@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { supabase } from "@/lib/supabase";
-import { Trophy } from "lucide-react";
 
 interface ProfileRow {
   clerk_id: string;
@@ -30,15 +29,12 @@ export default function LeaderboardPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6">
-        <div className="flex items-center gap-3">
-          <Trophy className="h-6 w-6 text-amber-400" />
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Leaderboard
-          </h1>
-        </div>
-        <p className="mt-1 text-sm text-slate-400">
-          Total nautical miles flown
+      <main className="mx-auto w-full max-w-[520px] px-5 py-10">
+        <h1 className="font-mono text-[22px] font-bold tracking-tight text-[#1d1d1f]">
+          Leaderboard
+        </h1>
+        <p className="mt-1 font-mono text-[12px] text-[#86868b]">
+          Total nautical miles
         </p>
 
         {loading ? (
@@ -46,54 +42,44 @@ export default function LeaderboardPage() {
             <div className="spinner" />
           </div>
         ) : profiles.length === 0 ? (
-          <div className="glass mt-8 flex flex-col items-center gap-3 rounded-2xl py-16 text-center">
-            <p className="text-slate-400">No flights logged yet. Be the first!</p>
+          <div className="mt-10 flex flex-col items-center gap-4 border border-[#e5e5e5] py-16 text-center">
+            <p className="text-[14px] text-[#86868b]">No flights logged yet.</p>
           </div>
         ) : (
-          <div className="mt-8 space-y-2">
+          <div className="mt-8 border-t border-[#e5e5e5]">
             {profiles.map((profile, i) => {
               const isYou = user?.id === profile.clerk_id;
               const rank = i + 1;
               return (
                 <div
                   key={profile.clerk_id}
-                  className={`glass flex items-center gap-4 rounded-2xl p-4 ${
-                    isYou ? "ring-1 ring-blue-500/30" : ""
+                  className={`flex items-center gap-4 border-b border-[#e5e5e5] py-3.5 ${
+                    isYou ? "bg-[#fafafa]" : ""
                   }`}
                 >
-                  <div
-                    className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg font-mono text-sm font-bold ${
-                      rank === 1
-                        ? "bg-amber-400/10 text-amber-400"
-                        : rank === 2
-                        ? "bg-slate-300/10 text-slate-300"
-                        : rank === 3
-                        ? "bg-amber-600/10 text-amber-600"
-                        : "bg-white/5 text-slate-500"
-                    }`}
-                  >
+                  <span className="w-6 text-right font-mono text-[13px] font-bold text-[#1d1d1f]">
                     {rank}
-                  </div>
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-white">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-mono text-[14px] font-medium text-[#1d1d1f]">
                         {isYou ? "You" : `Pilot #${profile.clerk_id.slice(-4)}`}
                       </span>
                       {isYou && (
-                        <span className="rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+                        <span className="font-mono text-[9px] font-bold tracking-widest text-[#86868b]">
                           YOU
                         </span>
                       )}
                     </div>
                     {profile.home_airport && (
-                      <p className="text-xs text-slate-500">
-                        Home: <span className="font-mono text-slate-400">{profile.home_airport}</span>
+                      <p className="font-mono text-[11px] text-[#86868b]">
+                        {profile.home_airport}
                       </p>
                     )}
                   </div>
-                  <span className="font-mono text-sm font-semibold text-white">
+                  <span className="font-mono text-[14px] font-semibold text-[#1d1d1f]">
                     {profile.total_miles.toLocaleString()}
-                    <span className="ml-1 text-xs font-normal text-slate-500">nm</span>
+                    <span className="ml-1 text-[11px] font-normal text-[#86868b]">nm</span>
                   </span>
                 </div>
               );

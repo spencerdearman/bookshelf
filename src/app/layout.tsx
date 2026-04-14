@@ -7,8 +7,6 @@ import {
   Show,
   UserButton,
 } from "@clerk/nextjs";
-import { dark } from "@clerk/themes";
-import { Plane } from "lucide-react";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -22,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SkyLog",
+  title: "Vector",
   description: "Track and log your flights",
 };
 
@@ -33,41 +31,40 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
-      <body className="min-h-full flex flex-col bg-[#0f172a] text-slate-200 antialiased">
-        <ClerkProvider appearance={{ baseTheme: dark }}>
-          <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0f172a]/80 backdrop-blur-xl">
-            <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-              <nav className="flex items-center gap-5 sm:gap-6">
-                <a href="/" className="flex items-center gap-2 text-[17px] font-semibold tracking-tight text-white">
-                  <Plane className="h-5 w-5 text-blue-400" />
-                  SkyLog
+      <body className="min-h-full flex flex-col bg-white text-[#1d1d1f] antialiased">
+        <ClerkProvider>
+          <header className="sticky top-0 z-50 bg-[#1d1d1f]">
+            <div className="mx-auto flex h-11 max-w-[980px] items-center justify-between px-5">
+              <nav className="flex items-center gap-7">
+                <a href="/" className="font-mono text-[13px] font-semibold tracking-tight text-white">
+                  Vector
                 </a>
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <a href="/" className="text-[13px] text-slate-400 transition-colors hover:text-white">
+                <div className="flex items-center gap-6">
+                  <a href="/" className="text-[12px] text-[#d1d1d6] transition-colors hover:text-white">
                     Dashboard
                   </a>
                   <Show when="signed-in">
-                    <a href="/log" className="text-[13px] text-slate-400 transition-colors hover:text-white">
-                      Log Flight
+                    <a href="/log" className="text-[12px] text-[#d1d1d6] transition-colors hover:text-white">
+                      Log
                     </a>
-                    <a href="/logbook" className="text-[13px] text-slate-400 transition-colors hover:text-white">
+                    <a href="/logbook" className="text-[12px] text-[#d1d1d6] transition-colors hover:text-white">
                       Logbook
                     </a>
-                    <a href="/leaderboard" className="text-[13px] text-slate-400 transition-colors hover:text-white">
+                    <a href="/leaderboard" className="text-[12px] text-[#d1d1d6] transition-colors hover:text-white">
                       Leaderboard
                     </a>
                   </Show>
                 </div>
               </nav>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <Show when="signed-out">
                   <SignInButton>
-                    <button className="text-[13px] text-slate-400 transition-colors hover:text-white">
+                    <button className="text-[12px] text-[#d1d1d6] transition-colors hover:text-white">
                       Sign in
                     </button>
                   </SignInButton>
                   <SignUpButton>
-                    <button className="rounded-lg bg-blue-500 px-3.5 py-1.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-blue-400">
+                    <button className="rounded-full bg-white px-3.5 py-1 text-[12px] font-medium text-[#1d1d1f] transition-opacity hover:opacity-80">
                       Sign up
                     </button>
                   </SignUpButton>

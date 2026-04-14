@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useSession, useUser } from "@clerk/nextjs";
 import { createClerkSupabaseClient } from "@/lib/supabase";
-import { Plane, Trash2 } from "lucide-react";
 
 interface Flight {
   id: string;
@@ -20,7 +19,7 @@ interface Flight {
 
 export default function LogbookPage() {
   const { session } = useSession();
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
   const [flights, setFlights] = useState<Flight[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -62,15 +61,22 @@ export default function LogbookPage() {
     setDeletingId(null);
   }
 
-  if (!user) {
+  if (!isLoaded) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-slate-400">Sign in to view your logbook.</p>
+        <div className="spinner" />
       </div>
     );
   }
 
-  // Group flights by month
+  if (!user) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <p className="text-[14px] text-[#86868b]">Sign in to view your logbook.</p>
+      </div>
+    );
+  }
+
   const grouped = flights.reduce<Record<string, Flight[]>>((acc, flight) => {
     const d = new Date(flight.scheduled_departure);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -80,21 +86,21 @@ export default function LogbookPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
-        <div className="flex items-center justify-between">
+      <main className="mx-auto w-full max-w-[680px] px-5 py-10">
+        <div className="flex items-baseline justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            <h1 className="font-mono text-[22px] font-bold tracking-tight text-[#1d1d1f]">
               Logbook
             </h1>
-            <p className="mt-1 text-sm text-slate-400">
-              {flights.length} flight{flights.length !== 1 ? "s" : ""} logged
+            <p className="mt-1 font-mono text-[12px] text-[#86868b]">
+              {flights.length} flight{flights.length !== 1 ? "s" : ""}
             </p>
           </div>
           <a
             href="/log"
-            className="rounded-xl bg-blue-500 px-4 py-2.5 text-xs font-medium text-white transition-all duration-200 hover:bg-blue-400"
+            className="bg-[#1d1d1f] px-4 py-2 font-mono text-[11px] font-medium tracking-wider text-white transition-opacity hover:opacity-80"
           >
-            + Log Flight
+            LOG FLIGHT
           </a>
         </div>
 
@@ -103,17 +109,17 @@ export default function LogbookPage() {
             <div className="spinner" />
           </div>
         ) : flights.length === 0 ? (
-          <div className="glass mt-8 flex flex-col items-center gap-3 rounded-2xl py-16 text-center">
-            <p className="text-slate-400">Your logbook is empty.</p>
+          <div className="mt-10 flex flex-col items-center gap-4 border border-[#e5e5e5] py-16 text-center">
+            <p className="text-[14px] text-[#86868b]">Your logbook is empty.</p>
             <a
               href="/log"
-              className="rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-blue-400"
+              className="bg-[#1d1d1f] px-5 py-2 font-mono text-[11px] font-medium tracking-wider text-white transition-opacity hover:opacity-80"
             >
-              Log your first flight
+              LOG YOUR FIRST FLIGHT
             </a>
           </div>
         ) : (
-          <div className="mt-8 space-y-8">
+          <div className="mt-8 space-y-10">
             {Object.entries(grouped).map(([monthKey, monthFlights]) => {
               const [year, month] = monthKey.split("-");
               const label = new Date(Number(year), Number(month) - 1).toLocaleDateString("en-US", {
@@ -122,57 +128,44 @@ export default function LogbookPage() {
               });
               return (
                 <div key={monthKey}>
-                  <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-slate-500">
-                    {label}
-                  </h3>
-                  <div className="space-y-2">
+                  <p className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">
+                    {label.toUpperCase()}
+                  </p>
+                  <div className="mt-3 border-t border-[#e5e5e5]">
                     {monthFlights.map((flight) => {
                       const date = new Date(flight.scheduled_departure);
                       return (
-                        <div key={flight.id} className="glass group flex items-center gap-4 rounded-2xl p-4">
-                          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
-                            <Plane className="h-4 w-4 text-blue-400" />
-                          </div>
+                        <div key={flight.id} className="group flex items-center gap-4 border-b border-[#e5e5e5] py-3.5">
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-sm font-semibold text-white">
+                            <div className="flex items-baseline gap-3">
+                              <span className="font-mono text-[14px] font-semibold text-[#1d1d1f]">
                                 {flight.flight_number}
                               </span>
                               {flight.airline_name && (
-                                <span className="text-xs text-slate-500">{flight.airline_name}</span>
+                                <span className="text-[12px] text-[#86868b]">{flight.airline_name}</span>
                               )}
                             </div>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
-                              <span className="font-mono font-medium text-slate-300">{flight.departure_iata}</span>
-                              <span className="text-slate-600">→</span>
-                              <span className="font-mono font-medium text-slate-300">{flight.arrival_iata}</span>
-                              {flight.aircraft_type && (
-                                <>
-                                  <span className="text-slate-600">·</span>
-                                  <span>{flight.aircraft_type}</span>
-                                </>
-                              )}
-                              {flight.distance_nm && (
-                                <>
-                                  <span className="text-slate-600">·</span>
-                                  <span className="font-mono">{flight.distance_nm.toLocaleString()} nm</span>
-                                </>
-                              )}
+                            <div className="mt-0.5 font-mono text-[12px] text-[#86868b]">
+                              <span className="text-[#1d1d1f]">{flight.departure_iata}</span>
+                              {" \u2192 "}
+                              <span className="text-[#1d1d1f]">{flight.arrival_iata}</span>
+                              {flight.aircraft_type && ` \u00B7 ${flight.aircraft_type}`}
+                              {flight.distance_nm != null && ` \u00B7 ${flight.distance_nm.toLocaleString()} nm`}
                             </div>
                             {flight.notes && (
-                              <p className="mt-1 text-xs text-slate-500 italic">{flight.notes}</p>
+                              <p className="mt-1 text-[12px] italic text-[#aeaeb2]">{flight.notes}</p>
                             )}
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs text-slate-500">
+                            <span className="font-mono text-[12px] text-[#86868b]">
                               {date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                             </span>
                             <button
                               onClick={() => handleDelete(flight.id, flight.flight_number)}
                               disabled={deletingId === flight.id}
-                              className="rounded-lg p-1.5 text-slate-600 opacity-0 transition-all hover:bg-white/5 hover:text-red-400 group-hover:opacity-100"
+                              className="font-mono text-[10px] tracking-wider text-[#c7c7cc] opacity-0 transition-all hover:text-[#1d1d1f] group-hover:opacity-100"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              DEL
                             </button>
                           </div>
                         </div>

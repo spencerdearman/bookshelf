@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useSession, useUser } from "@clerk/nextjs";
 import { createClerkSupabaseClient } from "@/lib/supabase";
-import { Plane, MapPin, Clock, Route } from "lucide-react";
 
 interface Flight {
   id: string;
@@ -19,7 +18,7 @@ interface Flight {
 
 export default function Dashboard() {
   const { session } = useSession();
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
   const [flights, setFlights] = useState<Flight[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -56,90 +55,66 @@ export default function Dashboard() {
       });
   }, [session, user]);
 
+  if (!isLoaded) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <div className="spinner" />
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 text-center">
-        <Plane className="h-16 w-16 text-blue-400" />
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
-            SkyLog
+          <h1 className="font-mono text-[42px] font-bold tracking-tighter text-[#1d1d1f]">
+            Vector
           </h1>
-          <p className="mx-auto mt-3 max-w-md text-lg text-slate-400">
-            Track every flight. Build your logbook. See how far you&apos;ve flown.
+          <p className="mx-auto mt-2 max-w-xs text-[15px] leading-relaxed text-[#86868b]">
+            Track every flight. Build your logbook.
           </p>
         </div>
-        <div className="flex gap-3">
-          <a
-            href="/sign-in"
-            className="rounded-xl bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-blue-400"
-          >
-            Get Started
-          </a>
-        </div>
+        <a
+          href="/sign-in"
+          className="rounded-full bg-[#1d1d1f] px-7 py-2.5 text-[13px] font-medium text-white transition-opacity hover:opacity-80"
+        >
+          Get Started
+        </a>
       </div>
     );
   }
 
   return (
     <div className="flex flex-1 flex-col">
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="glass rounded-2xl p-5">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Route className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">Total Miles</span>
+      <main className="mx-auto w-full max-w-[980px] px-5 py-10">
+        {/* Stats row */}
+        <div className="grid grid-cols-2 gap-px border border-[#e5e5e5] sm:grid-cols-4">
+          {[
+            { label: "NM", value: loading ? "\u2014" : totalMiles.toLocaleString() },
+            { label: "HRS", value: loading ? "\u2014" : totalHours.toFixed(1) },
+            { label: "FLIGHTS", value: loading ? "\u2014" : flights.length.toString() },
+            { label: "AIRPORTS", value: loading ? "\u2014" : uniqueAirports.size.toString() },
+          ].map(({ label, value }) => (
+            <div key={label} className="bg-white p-5">
+              <p className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">{label}</p>
+              <p className="mt-1 font-mono text-[28px] font-bold tracking-tight text-[#1d1d1f]">{value}</p>
             </div>
-            <p className="mt-2 font-mono text-2xl font-bold text-white">
-              {loading ? "—" : totalMiles.toLocaleString()}
-            </p>
-            <p className="mt-0.5 text-xs text-slate-500">nautical miles</p>
-          </div>
-          <div className="glass rounded-2xl p-5">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Clock className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">Flight Hours</span>
-            </div>
-            <p className="mt-2 font-mono text-2xl font-bold text-white">
-              {loading ? "—" : totalHours.toFixed(1)}
-            </p>
-            <p className="mt-0.5 text-xs text-slate-500">hours in the air</p>
-          </div>
-          <div className="glass rounded-2xl p-5">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Plane className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">Flights</span>
-            </div>
-            <p className="mt-2 font-mono text-2xl font-bold text-white">
-              {loading ? "—" : flights.length}
-            </p>
-            <p className="mt-0.5 text-xs text-slate-500">logged</p>
-          </div>
-          <div className="glass rounded-2xl p-5">
-            <div className="flex items-center gap-2 text-slate-400">
-              <MapPin className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">Airports</span>
-            </div>
-            <p className="mt-2 font-mono text-2xl font-bold text-white">
-              {loading ? "—" : uniqueAirports.size}
-            </p>
-            <p className="mt-0.5 text-xs text-slate-500">unique</p>
-          </div>
+          ))}
         </div>
 
-        {/* Fleet breakdown */}
+        {/* Fleet */}
         {Object.keys(aircraftTypes).length > 0 && (
-          <div className="glass mt-6 rounded-2xl p-5">
-            <h2 className="text-xs font-medium uppercase tracking-wider text-slate-400">Fleet Diversity</h2>
+          <div className="mt-8">
+            <p className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">FLEET</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {Object.entries(aircraftTypes)
                 .sort((a, b) => b[1] - a[1])
                 .map(([type, count]) => (
                   <span
                     key={type}
-                    className="rounded-xl bg-white/5 px-3 py-1.5 font-mono text-xs text-slate-300"
+                    className="border border-[#e5e5e5] px-3 py-1 font-mono text-[11px] text-[#1d1d1f]"
                   >
-                    {type} <span className="text-blue-400">×{count}</span>
+                    {type} {count}
                   </span>
                 ))}
             </div>
@@ -147,13 +122,13 @@ export default function Dashboard() {
         )}
 
         {/* Recent flights */}
-        <div className="mt-8">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xs font-medium uppercase tracking-wider text-slate-400">
-              Recent Flights
-            </h2>
+        <div className="mt-10">
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">
+              RECENT
+            </p>
             {flights.length > 0 && (
-              <a href="/logbook" className="text-xs text-blue-400 transition-colors hover:text-blue-300">
+              <a href="/logbook" className="font-mono text-[11px] text-[#1d1d1f] underline underline-offset-2 transition-opacity hover:opacity-60">
                 View all
               </a>
             )}
@@ -164,51 +139,48 @@ export default function Dashboard() {
               <div className="spinner" />
             </div>
           ) : flights.length === 0 ? (
-            <div className="glass flex flex-col items-center gap-3 rounded-2xl py-16 text-center">
-              <p className="text-slate-400">No flights logged yet.</p>
+            <div className="mt-6 flex flex-col items-center gap-4 border border-[#e5e5e5] py-16 text-center">
+              <p className="text-[14px] text-[#86868b]">No flights logged yet.</p>
               <a
                 href="/log"
-                className="rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-blue-400"
+                className="rounded-full bg-[#1d1d1f] px-5 py-2 text-[12px] font-medium text-white transition-opacity hover:opacity-80"
               >
                 Log your first flight
               </a>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="mt-4 border-t border-[#e5e5e5]">
               {flights.slice(0, 5).map((flight) => {
                 const date = new Date(flight.scheduled_departure);
                 return (
-                  <div key={flight.id} className="glass flex items-center gap-4 rounded-2xl p-4">
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
-                      <Plane className="h-4 w-4 text-blue-400" />
-                    </div>
+                  <div key={flight.id} className="flex items-center gap-4 border-b border-[#e5e5e5] py-4">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-white">
+                      <div className="flex items-baseline gap-3">
+                        <span className="font-mono text-[14px] font-semibold text-[#1d1d1f]">
                           {flight.flight_number}
                         </span>
                         {flight.airline_name && (
-                          <span className="text-xs text-slate-500">{flight.airline_name}</span>
+                          <span className="text-[12px] text-[#86868b]">{flight.airline_name}</span>
                         )}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
-                        <span className="font-mono font-medium text-slate-300">{flight.departure_iata}</span>
-                        <span className="text-slate-600">→</span>
-                        <span className="font-mono font-medium text-slate-300">{flight.arrival_iata}</span>
+                      <div className="mt-1 flex items-center gap-2 font-mono text-[12px] text-[#86868b]">
+                        <span className="text-[#1d1d1f]">{flight.departure_iata}</span>
+                        <span>&rarr;</span>
+                        <span className="text-[#1d1d1f]">{flight.arrival_iata}</span>
                         {flight.aircraft_type && (
                           <>
-                            <span className="text-slate-600">·</span>
+                            <span>&middot;</span>
                             <span>{flight.aircraft_type}</span>
                           </>
                         )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-slate-400">
+                    <div className="text-right font-mono">
+                      <p className="text-[12px] text-[#86868b]">
                         {date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </p>
-                      {flight.distance_nm && (
-                        <p className="font-mono text-xs text-slate-500">
+                      {flight.distance_nm != null && (
+                        <p className="text-[11px] text-[#aeaeb2]">
                           {flight.distance_nm.toLocaleString()} nm
                         </p>
                       )}

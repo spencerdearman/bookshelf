@@ -7,6 +7,7 @@ import { createClerkSupabaseClient } from "@/lib/supabase";
 import FlightCard, { type FlightData } from "@/components/FlightCard";
 import FlightSearch from "@/components/FlightSearch";
 import AllRoutesMap from "@/components/AllRoutesMap";
+import { findAirport } from "@/lib/airports";
 
 export default function Dashboard() {
   const { session, isLoaded: sessionLoaded } = useSession();
@@ -15,7 +16,21 @@ export default function Dashboard() {
   const [flights, setFlights] = useState<FlightData[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const totalMiles = flights.reduce((sum, f) => sum + (f.distance_nm ?? 0), 0);
+  const totalMiles = flights.reduce((sum, f) => {
+    if (f.distance_nm) return sum + f.distance_nm;
+    // Estimate from airport coordinates
+    const dep = f.departure_iata ? findAirport(f.departure_iata) : null;
+    const arr = f.arrival_iata ? findAirport(f.arrival_iata) : null;
+    if (dep && arr) {
+      const R = 3959; // Earth radius in statute miles
+      const toRad = (d: number) => (d * Math.PI) / 180;
+      const dLat = toRad(arr.lat - dep.lat);
+      const dLon = toRad(arr.lng - dep.lng);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(dep.lat)) * Math.cos(toRad(arr.lat)) * Math.sin(dLon / 2) ** 2;
+      return sum + 2 * R * Math.asin(Math.sqrt(a));
+    }
+    return sum;
+  }, 0);
   const totalHours = flights.reduce((sum, f) => {
     if (!f.scheduled_departure || !f.scheduled_arrival) return sum;
     const diff =
@@ -91,10 +106,10 @@ export default function Dashboard() {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-px border border-[#e5e5e5] sm:grid-cols-4">
           {[
-            { label: "NM", value: loading ? "\u2014" : totalMiles.toLocaleString() },
-            { label: "HRS", value: loading ? "\u2014" : totalHours.toFixed(1) },
             { label: "FLIGHTS", value: loading ? "\u2014" : flights.length.toString() },
+            { label: "HRS", value: loading ? "\u2014" : totalHours.toFixed(1) },
             { label: "AIRPORTS", value: loading ? "\u2014" : uniqueAirports.size.toString() },
+            { label: "MILES", value: loading ? "\u2014" : totalMiles.toLocaleString() },
           ].map(({ label, value }) => (
             <div key={label} className="bg-white p-5">
               <p className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">

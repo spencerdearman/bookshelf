@@ -226,7 +226,7 @@ export default function FlightDetailPage({ params }: { params: Promise<{ id: str
                   <p className="font-mono text-[10px] font-medium tracking-widest text-[#86868b]">DEPARTURE</p>
                   {rd.gate_departure?.scheduled && (
                     <div className="mt-2">
-                      <p className="font-mono text-[9px] tracking-wider text-[#aeaeb2]">GATE</p>
+                      <p className="font-mono text-[9px] tracking-wider text-[#aeaeb2]">TIME</p>
                       <p className="font-mono text-[13px] text-[#1d1d1f]">
                         {fmtTime(rd.gate_departure.actual ?? rd.gate_departure.scheduled)}
                       </p>
@@ -266,7 +266,7 @@ export default function FlightDetailPage({ params }: { params: Promise<{ id: str
                   )}
                   {rd.gate_arrival?.scheduled && (
                     <div className="mt-2">
-                      <p className="font-mono text-[9px] tracking-wider text-[#aeaeb2]">GATE</p>
+                      <p className="font-mono text-[9px] tracking-wider text-[#aeaeb2]">TIME</p>
                       <p className="font-mono text-[13px] text-[#1d1d1f]">
                         {fmtTime(rd.gate_arrival.actual ?? rd.gate_arrival.scheduled)}
                       </p>
@@ -288,24 +288,18 @@ export default function FlightDetailPage({ params }: { params: Promise<{ id: str
             )}
 
             {/* Flight data row */}
-            {(rd.direct_distance_mi || rd.planned_speed_kts || rd.planned_altitude_ft) && (
-              <div className="grid grid-cols-3 border-b border-[#e5e5e5]">
-                <div className="px-5 py-3">
+            {(rd.direct_distance_mi || rd.planned_speed_kts) && (
+              <div className="grid grid-cols-2 border-b border-[#e5e5e5]">
+                <div className="border-r border-[#e5e5e5] px-5 py-3">
                   <p className="font-mono text-[9px] tracking-wider text-[#aeaeb2]">DISTANCE</p>
                   <p className="font-mono text-[13px] text-[#1d1d1f]">
                     {rd.direct_distance_mi ? `${rd.direct_distance_mi.toLocaleString()} mi` : "\u2014"}
                   </p>
                 </div>
-                <div className="border-x border-[#e5e5e5] px-5 py-3">
+                <div className="px-5 py-3">
                   <p className="font-mono text-[9px] tracking-wider text-[#aeaeb2]">SPEED</p>
                   <p className="font-mono text-[13px] text-[#1d1d1f]">
                     {rd.planned_speed_kts ? `${rd.planned_speed_kts} kts` : "\u2014"}
-                  </p>
-                </div>
-                <div className="px-5 py-3">
-                  <p className="font-mono text-[9px] tracking-wider text-[#aeaeb2]">ALTITUDE</p>
-                  <p className="font-mono text-[13px] text-[#1d1d1f]">
-                    {rd.planned_altitude_ft ? `${rd.planned_altitude_ft.toLocaleString()} ft` : "\u2014"}
                   </p>
                 </div>
               </div>

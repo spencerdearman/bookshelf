@@ -33,9 +33,11 @@ interface RichData {
   fuel_burn_gal?: number;
 }
 
-function fmtTime(ts: number | null | undefined): string {
+function fmtTime(ts: number | string | null | undefined): string {
   if (!ts) return "\u2014";
-  return new Date(ts * 1000).toLocaleTimeString("en-US", {
+  const d = typeof ts === "string" ? new Date(ts) : new Date(ts * 1000);
+  if (isNaN(d.getTime())) return "\u2014";
+  return d.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,

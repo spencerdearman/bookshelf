@@ -3,7 +3,7 @@ import { fetchStates, expandCallsign } from "@/lib/opensky";
 import { lookupFlight } from "@/lib/flightaware";
 import { findAirport } from "@/lib/airports";
 
-export const maxDuration = 30; // Allow up to 30s on Vercel
+export const runtime = "edge";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;

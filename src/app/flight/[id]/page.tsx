@@ -87,6 +87,7 @@ export default function FlightDetailPage({ params }: { params: Promise<{ id: str
       }
 
       const res = await fetch(`/api/flights/refresh?${params}`);
+      if (!res.ok) { setRefreshing(false); return; }
       const data = await res.json();
 
       if (data.updated) {

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { fetchStates, expandCallsign, StateVector } from "@/lib/opensky";
 import { lookupFlight } from "@/lib/flightaware";
 
-export const maxDuration = 30;
+export const runtime = "edge";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;

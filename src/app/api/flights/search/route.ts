@@ -3,7 +3,7 @@ import { fetchDepartures, fetchArrivals, expandCallsign } from "@/lib/opensky";
 import { findAirport } from "@/lib/airports";
 import { lookupFlight, searchRoute } from "@/lib/flightaware";
 
-export const maxDuration = 30;
+export const runtime = "edge";
 
 function toIcao(code: string): string {
   const upper = code.toUpperCase().trim();

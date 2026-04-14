@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { fetchDepartures, fetchArrivals, expandCallsign } from "@/lib/opensky";
 import { findAirport } from "@/lib/airports";
+import { lookupFlight, searchRoute } from "@/lib/flightaware";
 
 export const maxDuration = 30;
 
@@ -34,17 +35,68 @@ export async function GET(request: NextRequest) {
   }
 
   const airport = toIcao(rawAirport);
+  const originIata = toIata(rawAirport);
   const dayStart = new Date(`${date}T00:00:00Z`);
   const dayEnd = new Date(`${date}T23:59:59Z`);
   const begin = Math.floor(dayStart.getTime() / 1000);
   const end = Math.floor(dayEnd.getTime() / 1000);
 
+  // ── Strategy 1: If origin+dest provided, use FlightAware route search ──
+  if (destIata) {
+    const destIcaoCode = toIcao(destIata);
+    const destTarget = toIata(destIata);
+
+    try {
+      // Get airline prefix for filtering
+      const airlinePrefix = airline
+        ? expandCallsign(`${airline}1`).map((c) => c.replace(/\d+$/, ""))[0]
+        : undefined;
+
+      // Search FlightAware for flights between these airports
+      const callsigns = await searchRoute(airport, destIcaoCode, airlinePrefix);
+      const matched: {
+        icao24: string; firstSeen: number; estDepartureAirport: string | null;
+        lastSeen: number; estArrivalAirport: string | null; callsign: string | null;
+        estDepartureAirportHorizDistance: number; estDepartureAirportVertDistance: number;
+        estArrivalAirportHorizDistance: number; estArrivalAirportVertDistance: number;
+        departureAirportCandidatesCount: number; arrivalAirportCandidatesCount: number;
+      }[] = [];
+
+      for (const cs of callsigns.slice(0, 8)) {
+        try {
+          const result = await lookupFlight(cs, airport);
+          if (!result?.match) continue;
+          const leg = result.match;
+          const legOrig = leg.origin.iata || toIata(leg.origin.icao);
+          const legDest = leg.destination.iata || toIata(leg.destination.icao);
+          if (legOrig === originIata && legDest === destTarget) {
+            matched.push({
+              icao24: "",
+              firstSeen: leg.takeoff.actual ?? leg.takeoff.scheduled ?? begin,
+              estDepartureAirport: leg.origin.icao || airport,
+              lastSeen: leg.landing.actual ?? leg.landing.scheduled ?? end,
+              estArrivalAirport: leg.destination.icao || destIcaoCode,
+              callsign: cs,
+              estDepartureAirportHorizDistance: 0, estDepartureAirportVertDistance: 0,
+              estArrivalAirportHorizDistance: 0, estArrivalAirportVertDistance: 0,
+              departureAirportCandidatesCount: 0, arrivalAirportCandidatesCount: 0,
+            });
+          }
+        } catch { /* skip individual lookup failures */ }
+      }
+
+      if (matched.length > 0) {
+        return Response.json({ flights: matched });
+      }
+    } catch { /* FlightAware route search failed, try OpenSky below */ }
+  }
+
+  // ── Strategy 2: OpenSky (works locally, may fail on Vercel) ──
   try {
     let flights = mode === "arrivals"
       ? await fetchArrivals(airport, begin, end)
       : await fetchDepartures(airport, begin, end);
 
-    // Filter to flights with callsigns
     flights = flights.filter((f) => f.callsign?.trim());
 
     // Airline filter
@@ -56,22 +108,32 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Destination filter — match against known OpenSky arrivals only
-    // Flights with unknown destinations are kept so the client can enrich them
+    // Dest filter on OpenSky results
     if (destIata) {
       const destTarget = toIata(destIata);
       const destIcaoCode = toIcao(destIata);
-
       flights = flights.filter((f) => {
         const arr = f.estArrivalAirport;
-        if (!arr) return true; // Unknown — keep it, client will resolve
+        if (!arr) return true; // Unknown — keep, client can resolve
         return toIata(arr) === destTarget || arr === destIcaoCode;
       });
     }
 
     return Response.json({ flights });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return Response.json({ error: message }, { status: 502 });
+  } catch {
+    // OpenSky also failed
   }
+
+  // ── Both failed ──
+  if (destIata) {
+    return Response.json({
+      flights: [],
+      message: "Flight data providers are temporarily unreachable. Try again shortly.",
+    });
+  }
+
+  return Response.json({
+    flights: [],
+    error: "Flight data is temporarily unavailable. Try adding a destination to search via FlightAware.",
+  });
 }

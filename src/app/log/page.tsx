@@ -132,12 +132,20 @@ export default function LogFlightPage() {
 
       const res = await fetch(`/api/flights/search?${params}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Error (${res.status})`);
+
+      if (!res.ok) {
+        throw new Error(data.error || `Error (${res.status})`);
+      }
 
       const flights: FlightResult[] = data.flights ?? [];
 
       if (flights.length === 0) {
-        setError("No flights found. Try a different date or adjust your filters.");
+        const msg = data.error || data.message || (
+          !dest
+            ? "No flights found. Try adding a destination to improve results."
+            : "No flights found. Try a different date or adjust your filters."
+        );
+        setError(msg);
       } else {
         setResults(flights);
       }
